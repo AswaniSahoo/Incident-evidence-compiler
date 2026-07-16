@@ -46,3 +46,15 @@ class DuplicateSignalError(DomainValidationError):
 
 class BaselineComputationError(DomainError, ArithmeticError):
     code = "baseline_computation_failed"
+
+
+class InvalidEvidenceLedgerError(DomainValidationError):
+    code = "invalid_evidence_ledger"
+
+
+class InvalidHypothesisError(DomainValidationError):
+    code = "invalid_hypothesis"
+
+
+class CanonicalSerializationError(DomainValidationError):
+    code = "canonical_serialization_failed"
