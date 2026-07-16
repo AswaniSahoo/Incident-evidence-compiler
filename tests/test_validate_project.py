@@ -164,7 +164,7 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(3)
+        self.write_context(4)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
@@ -209,6 +209,62 @@ class PhasePolicyTests(unittest.TestCase):
         errors: list[str] = []
         validator._validate_required_files(2, errors)
         self.assertEqual(errors, [f"missing required file: {omitted}"])
+
+    def test_phase3_required_files_are_cumulative(self) -> None:
+        self.assertEqual(
+            validator.PHASE_REQUIRED_FILES[3],
+            (
+                "docs/decisions/0006-phase-3-change-events.md",
+                "docs/devlog/0003-phase-3-change-events.md",
+                "src/incident_evidence_compiler/domain/changes.py",
+                "src/incident_evidence_compiler/domain/change_evidence.py",
+                "src/incident_evidence_compiler/domain/change_hypotheses.py",
+                "src/incident_evidence_compiler/domain/change_verifier.py",
+                "tests/test_changes.py",
+                "tests/test_change_verifier.py",
+            ),
+        )
+        cumulative = (
+            validator.BASE_REQUIRED_FILES
+            + validator.PHASE_REQUIRED_FILES[1]
+            + validator.PHASE_REQUIRED_FILES[2]
+            + validator.PHASE_REQUIRED_FILES[3]
+        )
+        for relative in cumulative:
+            target = validator.ROOT / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("fixture\n", encoding="utf-8")
+        omitted = validator.PHASE_REQUIRED_FILES[3][0]
+        (validator.ROOT / omitted).unlink()
+        errors: list[str] = []
+        validator._validate_required_files(3, errors)
+        self.assertEqual(errors, [f"missing required file: {omitted}"])
+
+    def test_phase3_reuses_phase1_ci_and_scope(self) -> None:
+        self.assertEqual(validator.EXPECTED_CI_RUNS_BY_PHASE[3], validator.PHASE1_CI_RUNS)
+        self.assertEqual(validator.REQUIRED_ACTIONS_BY_PHASE[3], validator.PHASE1_REQUIRED_ACTIONS)
+        (validator.ROOT / "src").mkdir()
+        (validator.ROOT / "pyproject.toml").write_text("fixture\n", encoding="utf-8")
+        (validator.ROOT / "uv.lock").write_text("fixture\n", encoding="utf-8")
+        errors: list[str] = []
+        validator._validate_phase_scope(3, errors)
+        self.assertEqual(errors, [])
+        (validator.ROOT / "infra").mkdir()
+        validator._validate_phase_scope(3, errors)
+        self.assertTrue(any("infra" in error for error in errors))
+
+    def test_license_artifact_blocked_until_decision_recorded(self) -> None:
+        (validator.ROOT / "LICENSE").write_text("Apache License\n", encoding="utf-8")
+        errors: list[str] = []
+        validator._validate_phase_scope(3, errors)
+        self.assertTrue(any("LICENSE" in error for error in errors))
+
+        decisions = validator.ROOT / "docs" / "decisions"
+        decisions.mkdir(parents=True)
+        (decisions / "0008-apache-2.0-license.md").write_text("# license\n", encoding="utf-8")
+        errors = []
+        validator._validate_phase_scope(3, errors)
+        self.assertEqual(errors, [])
 
     def test_phase2_keeps_phase1_scope_and_tooling(self) -> None:
         (validator.ROOT / "src").mkdir()
