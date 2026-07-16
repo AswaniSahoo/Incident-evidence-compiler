@@ -4,11 +4,12 @@ import argparse
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIRED_FILES = (
+BASE_REQUIRED_FILES = (
     ".editorconfig",
     ".gitattributes",
     ".gitignore",
@@ -35,6 +36,35 @@ REQUIRED_FILES = (
     "tests/test_project_hook.py",
     "tests/test_validate_project.py",
 )
+PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
+    0: (),
+    1: (
+        "docs/decisions/0004-phase-1-domain-baseline.md",
+        "docs/devlog/0001-phase-1-domain-baseline.md",
+        "docs/datasets/rcaeval-re2.md",
+        "docs/datasets/rcaeval-re2.manifest.json",
+        "pyproject.toml",
+        "uv.lock",
+        "src/incident_evidence_compiler/__init__.py",
+        "src/incident_evidence_compiler/domain/__init__.py",
+        "src/incident_evidence_compiler/domain/baseline.py",
+        "src/incident_evidence_compiler/domain/errors.py",
+        "src/incident_evidence_compiler/domain/identifiers.py",
+        "src/incident_evidence_compiler/domain/incidents.py",
+        "src/incident_evidence_compiler/domain/metrics.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/adapter.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/csv_loader.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/discovery.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/errors.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/ids.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/limits.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/manifest.py",
+        "src/incident_evidence_compiler/evaluation/rcaeval/sidecar.py",
+        "tests/test_domain.py",
+        "tests/test_package.py",
+        "tests/test_rcaeval.py",
+    ),
+}
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
     "## Current objective",
@@ -55,14 +85,41 @@ EXPECTED_HOOKS: dict[str, tuple[tuple[str | None, str], ...]] = {
     "postToolUse": (("shell", "log"), ("write", "log")),
     "stop": ((None, "stop"),),
 }
-EXPECTED_CI_RUNS = frozenset(
+PHASE0_CI_RUNS = frozenset(
     {
-        "python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py",
+        (
+            "python -m py_compile scripts/validate_project.py "
+            ".kiro/hooks/project_hook.py tests/test_project_hook.py "
+            "tests/test_validate_project.py"
+        ),
         'python -m unittest discover -s tests -p "test_*.py" -v',
         "python scripts/validate_project.py",
         "git show --check --oneline --format=fuller HEAD",
     }
 )
+PHASE1_CI_RUNS = frozenset(
+    {
+        "uv sync --locked",
+        "uv run --locked python -m compileall -q src scripts .kiro/hooks tests",
+        'uv run --locked python -m unittest discover -s tests -p "test_*.py" -v',
+        "uv run --locked ruff check .",
+        "uv run --locked ruff format --check .",
+        "uv run --locked mypy src tests",
+        "uv run --locked python scripts/validate_project.py",
+        "git show --check --oneline --format=fuller HEAD",
+    }
+)
+EXPECTED_CI_RUNS_BY_PHASE = {0: PHASE0_CI_RUNS, 1: PHASE1_CI_RUNS}
+BASE_REQUIRED_ACTIONS = frozenset(
+    {
+        "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
+        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065",
+    }
+)
+PHASE1_REQUIRED_ACTIONS = BASE_REQUIRED_ACTIONS | {
+    "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
+}
+REQUIRED_ACTIONS_BY_PHASE = {0: BASE_REQUIRED_ACTIONS, 1: PHASE1_REQUIRED_ACTIONS}
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
     "app",
@@ -79,11 +136,30 @@ FORBIDDEN_PHASE0_PATHS = (
     "COPYING",
     "NOTICE",
 )
-TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml"}
+PHASE1_SCOPE_EXCEPTIONS = {"src", "pyproject.toml", "uv.lock"}
+TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
 
 
-def _validate_required_files(errors: list[str]) -> None:
-    for relative in REQUIRED_FILES:
+def _current_phase(errors: list[str]) -> int | None:
+    path = ROOT / "PROJECT_CONTEXT.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        errors.append("cannot read PROJECT_CONTEXT.md current phase")
+        return None
+    match = re.search(r"^## Current phase\s*\n\s*Phase (\d+)\b", text, re.MULTILINE)
+    if match is None:
+        errors.append("PROJECT_CONTEXT.md current phase is malformed")
+        return None
+    phase = int(match.group(1))
+    if phase not in PHASE_REQUIRED_FILES:
+        errors.append(f"unsupported project phase: {phase}; update governance first")
+        return None
+    return phase
+
+
+def _validate_required_files(phase: int, errors: list[str]) -> None:
+    for relative in BASE_REQUIRED_FILES + PHASE_REQUIRED_FILES[phase]:
         if not (ROOT / relative).is_file():
             errors.append(f"missing required file: {relative}")
 
@@ -97,6 +173,19 @@ def _read_json(relative: str, errors: list[str]) -> dict[str, Any]:
         return {}
     if not isinstance(value, dict):
         errors.append(f"expected a JSON object in {relative}")
+        return {}
+    return value
+
+
+def _read_toml(relative: str, errors: list[str]) -> dict[str, Any]:
+    path = ROOT / relative
+    try:
+        value = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        errors.append(f"invalid TOML in {relative}: {exc}")
+        return {}
+    if not isinstance(value, dict):
+        errors.append(f"expected a TOML table in {relative}")
         return {}
     return value
 
@@ -157,7 +246,9 @@ def _validate_agent(errors: list[str]) -> None:
                 continue
             expected_command = f"python .kiro/hooks/project_hook.py {action}"
             if entry.get("command") != expected_command:
-                errors.append(f"{relative} {trigger}[{index}] command must equal {expected_command!r}")
+                errors.append(
+                    f"{relative} {trigger}[{index}] command must equal {expected_command!r}"
+                )
             matcher = entry.get("matcher")
             if matcher != expected_matcher:
                 errors.append(
@@ -173,10 +264,18 @@ def _validate_settings(errors: list[str]) -> None:
             errors.append(f"{relative} must set {key} to {expected!r}")
 
 
-def _validate_phase0_scope(errors: list[str]) -> None:
-    for relative in FORBIDDEN_PHASE0_PATHS:
+def _validate_phase_scope(phase: int, errors: list[str]) -> None:
+    forbidden = set(FORBIDDEN_PHASE0_PATHS)
+    if phase == 1:
+        forbidden -= PHASE1_SCOPE_EXCEPTIONS
+    for relative in sorted(forbidden):
         if (ROOT / relative).exists():
-            errors.append(f"Phase 0 must not contain runtime or undecided artifact: {relative}")
+            errors.append(
+                f"Phase {phase} must not contain runtime or undecided artifact: {relative}"
+            )
+
+
+def _validate_provenance(errors: list[str]) -> None:
     provenance = ROOT / "docs" / "provenance.md"
     if provenance.is_file():
         text = provenance.read_text(encoding="utf-8")
@@ -188,40 +287,146 @@ def _validate_phase0_scope(errors: list[str]) -> None:
             errors.append("provenance must state the clean-room source boundary")
 
 
-def _workflow_step_values(text: str, key: str) -> list[str]:
+def _validate_dataset_policy(errors: list[str]) -> None:
+    archive_names = {"RE2-OB.zip", "RE2-SS.zip", "RE2-TT.zip"}
+    synthetic_root = ROOT / "tests" / "fixtures" / "rcaeval"
+    for path in ROOT.rglob("*"):
+        if ".git" in path.parts:
+            continue
+        if path.name in archive_names:
+            errors.append(f"raw RCAEval archive is forbidden: {path.relative_to(ROOT)}")
+        if path.is_dir() and path.name in {"RE2-OB", "RE2-SS", "RE2-TT"}:
+            try:
+                path.relative_to(synthetic_root)
+            except ValueError:
+                errors.append(f"extracted RCAEval tree is forbidden: {path.relative_to(ROOT)}")
+        if path.is_file() and "sidecar" in path.name.lower():
+            try:
+                path.relative_to(ROOT / "artifacts" / "evaluation-sidecars")
+            except ValueError:
+                if "src" not in path.parts and "tests" not in path.parts:
+                    relative = path.relative_to(ROOT)
+                    errors.append(
+                        f"evaluation sidecar must remain under ignored artifacts: {relative}"
+                    )
+
+
+def _validate_phase1_tooling(errors: list[str]) -> None:
+    project_file = _read_toml("pyproject.toml", errors)
+    project = project_file.get("project", {})
+    build = project_file.get("build-system", {})
+    groups = project_file.get("dependency-groups", {})
+    tools = project_file.get("tool", {})
+    if not isinstance(project, dict) or project.get("name") != "incident-evidence-compiler":
+        errors.append("pyproject project name must be incident-evidence-compiler")
+        project = {}
+    if project.get("requires-python") != ">=3.12,<3.13":
+        errors.append("pyproject requires-python must equal >=3.12,<3.13")
+    if project.get("dependencies") != []:
+        errors.append("Phase 1 application runtime dependencies must be empty")
+    if "optional-dependencies" in project:
+        errors.append("Phase 1 must not declare optional runtime dependencies")
+    if not isinstance(build, dict) or build.get("requires") != ["uv_build==0.11.17"]:
+        errors.append("build backend requirement must equal uv_build==0.11.17")
+    if not isinstance(build, dict) or build.get("build-backend") != "uv_build":
+        errors.append("build backend must equal uv_build")
+    dev = groups.get("dev") if isinstance(groups, dict) else None
+    if not isinstance(dev, list) or set(dev) != {"mypy==2.1.0", "ruff==0.15.13"}:
+        errors.append("development tools must exactly pin mypy==2.1.0 and ruff==0.15.13")
+    if not isinstance(tools, dict):
+        tools = {}
+    uv = tools.get("uv", {})
+    ruff = tools.get("ruff", {})
+    mypy = tools.get("mypy", {})
+    if not isinstance(uv, dict) or uv.get("required-version") != "==0.11.17":
+        errors.append("tool.uv.required-version must equal ==0.11.17")
+    if not isinstance(ruff, dict) or ruff.get("target-version") != "py312":
+        errors.append("tool.ruff.target-version must equal py312")
+    if (
+        not isinstance(mypy, dict)
+        or mypy.get("python_version") != "3.12"
+        or mypy.get("strict") is not True
+    ):
+        errors.append("mypy must target Python 3.12 in strict mode")
+
+    lock = _read_toml("uv.lock", errors)
+    packages = lock.get("package", [])
+    if not isinstance(packages, list):
+        errors.append("uv.lock packages must be an array")
+        return
+    for name, version in (("mypy", "2.1.0"), ("ruff", "0.15.13")):
+        matches = [
+            package
+            for package in packages
+            if isinstance(package, dict)
+            and package.get("name") == name
+            and package.get("version") == version
+        ]
+        if len(matches) != 1:
+            errors.append(f"uv.lock must contain exactly one {name}=={version}")
+    roots = [
+        package
+        for package in packages
+        if isinstance(package, dict) and package.get("name") == "incident-evidence-compiler"
+    ]
+    if len(roots) != 1 or roots[0].get("source") != {"editable": "."}:
+        errors.append("uv.lock must contain the editable incident-evidence-compiler root")
+
+
+def _workflow_steps(text: str) -> tuple[dict[str, str], ...]:
     lines = text.splitlines()
-    values: list[str] = []
-    step_pattern = re.compile(r"^ {6}- name:\s+\S")
-    value_pattern = re.compile(rf"^ {{8}}{re.escape(key)}:\s+(.+)$")
-    for index, line in enumerate(lines[:-1]):
-        if not step_pattern.match(line):
+    starts = [
+        index
+        for index, line in enumerate(lines)
+        if re.match(r"^ {6}- [A-Za-z][A-Za-z-]*:\s*", line)
+    ]
+    steps: list[dict[str, str]] = []
+    scalar_pattern = re.compile(r"^ {8}([A-Za-z][A-Za-z-]*):\s*(.*)$")
+    first_pattern = re.compile(r"^ {6}- ([A-Za-z][A-Za-z-]*):\s*(.*)$")
+    for position, start in enumerate(starts):
+        stop = starts[position + 1] if position + 1 < len(starts) else len(lines)
+        first = first_pattern.match(lines[start])
+        if first is None:
             continue
-        next_index = index + 1
-        while next_index < len(lines) and not lines[next_index].strip():
-            next_index += 1
-        if next_index >= len(lines):
-            continue
-        match = value_pattern.match(lines[next_index])
-        if match:
-            values.append(match.group(1).split(" #", 1)[0].strip())
-    return values
+        step = {first.group(1): first.group(2).split(" #", 1)[0].strip()}
+        for line in lines[start + 1 : stop]:
+            match = scalar_pattern.match(line)
+            if match is not None:
+                step[match.group(1)] = match.group(2).split(" #", 1)[0].strip()
+        steps.append(step)
+    return tuple(steps)
 
 
-def _validate_ci(errors: list[str]) -> None:
+def _is_unconditional_fatal_step(step: dict[str, str]) -> bool:
+    return "if" not in step and step.get("continue-on-error", "false").lower() == "false"
+
+
+def _validate_ci(phase: int, errors: list[str]) -> None:
     path = ROOT / ".github" / "workflows" / "ci.yml"
     if not path.is_file():
         return
     text = path.read_text(encoding="utf-8")
-    runs = frozenset(_workflow_step_values(text, "run"))
-    for command in EXPECTED_CI_RUNS:
-        if command not in runs:
+    steps = _workflow_steps(text)
+    for command in EXPECTED_CI_RUNS_BY_PHASE[phase]:
+        matching = [step for step in steps if step.get("run") == command]
+        if not matching:
             errors.append(f"CI workflow missing executable step: {command}")
-    uses = _workflow_step_values(text, "uses")
+        elif not any(_is_unconditional_fatal_step(step) for step in matching):
+            errors.append(f"CI gate must be unconditional and fatal: {command}")
+    uses = [step["uses"] for step in steps if "uses" in step]
     if not uses:
         errors.append("CI workflow must declare immutable action dependencies")
     for action in uses:
         if not PINNED_ACTION.fullmatch(action):
             errors.append(f"CI action must be pinned to a full commit SHA: {action}")
+    for action in REQUIRED_ACTIONS_BY_PHASE[phase]:
+        matching = [step for step in steps if step.get("uses") == action]
+        if not matching:
+            errors.append(f"CI workflow missing required immutable action: {action}")
+        elif not any(_is_unconditional_fatal_step(step) for step in matching):
+            errors.append(f"CI action must be unconditional and fatal: {action}")
+    if "PYTHONPATH" in text:
+        errors.append("CI workflow must not set PYTHONPATH")
 
 
 def _validate_text_hygiene(errors: list[str]) -> None:
@@ -229,6 +434,8 @@ def _validate_text_hygiene(errors: list[str]) -> None:
         if (
             not path.is_file()
             or ".git" in path.parts
+            or ".venv" in path.parts
+            or "__pycache__" in path.parts
             or (".kiro" in path.parts and "logs" in path.parts)
         ):
             continue
@@ -255,14 +462,24 @@ def main() -> int:
     args = parser.parse_args()
 
     errors: list[str] = []
-    _validate_required_files(errors)
+    phase = _current_phase(errors)
+    if phase is None:
+        print("project validation failed:")
+        for error in errors:
+            print(f"- {error}")
+        return 1
+    _validate_required_files(phase, errors)
     _validate_context(errors)
     _validate_agent(errors)
     _validate_settings(errors)
     _validate_text_hygiene(errors)
     if not args.quick:
-        _validate_phase0_scope(errors)
-        _validate_ci(errors)
+        _validate_phase_scope(phase, errors)
+        _validate_provenance(errors)
+        _validate_dataset_policy(errors)
+        if phase == 1:
+            _validate_phase1_tooling(errors)
+        _validate_ci(phase, errors)
 
     if errors:
         print("project validation failed:")

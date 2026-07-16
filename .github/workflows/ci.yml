@@ -19,14 +19,32 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Compile governance code
-        run: python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py
+      - name: Set up uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.17"
+          enable-cache: false
 
-      - name: Test hook behavior
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Install locked environment
+        run: uv sync --locked
+
+      - name: Compile source and governance code
+        run: uv run --locked python -m compileall -q src scripts .kiro/hooks tests
+
+      - name: Run unit tests
+        run: uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+
+      - name: Type check
+        run: uv run --locked mypy src tests
 
       - name: Validate project governance
-        run: python scripts/validate_project.py
+        run: uv run --locked python scripts/validate_project.py
 
       - name: Check committed whitespace errors
         run: git show --check --oneline --format=fuller HEAD

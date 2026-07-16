@@ -7,7 +7,7 @@ import re
 import shlex
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -144,7 +144,7 @@ def _append_log(event: dict[str, Any]) -> None:
     _rotate_log()
     raw_session = os.environ.get("KIRO_SESSION_ID", "unknown")
     record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "session_id": _fingerprint(raw_session),
         "event": _safe_label(event.get("hook_event_name")),
         "tool": _safe_label(event.get("tool_name")),
@@ -186,7 +186,7 @@ def _git_invocations(command: str) -> list[tuple[str, list[str]]] | None:
             (
                 index
                 for index, token in enumerate(tokens)
-                if Path(token.strip('"\'')).name.casefold() in {"git", "git.exe"}
+                if Path(token.strip("\"'")).name.casefold() in {"git", "git.exe"}
             ),
             None,
         )
@@ -194,9 +194,9 @@ def _git_invocations(command: str) -> list[tuple[str, list[str]]] | None:
             continue
         index = git_index + 1
         while index < len(tokens):
-            token = tokens[index].strip('"\'')
+            token = tokens[index].strip("\"'")
             lowered = token.casefold()
-            if lowered in {"-c", "-c", "--git-dir", "--work-tree", "--namespace"}:
+            if lowered in {"-c", "--git-dir", "--work-tree", "--namespace"}:
                 index += 2
                 continue
             if lowered.startswith(("--git-dir=", "--work-tree=", "--namespace=")):
@@ -208,7 +208,7 @@ def _git_invocations(command: str) -> list[tuple[str, list[str]]] | None:
             if token.startswith("-"):
                 index += 1
                 continue
-            args = [item.strip('"\'') for item in tokens[index + 1 :]]
+            args = [item.strip("\"'") for item in tokens[index + 1 :]]
             invocations.append((lowered, args))
             break
     return invocations
@@ -232,11 +232,7 @@ def _is_disallowed_git_command(command: str) -> bool:
             return True
         if subcommand == "commit" and any(
             argument in {"--amend", "--no-verify", "-n"}
-            or (
-                argument.startswith("-")
-                and not argument.startswith("--")
-                and "n" in argument[1:]
-            )
+            or (argument.startswith("-") and not argument.startswith("--") and "n" in argument[1:])
             for argument in lowered
         ):
             return True
