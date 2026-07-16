@@ -64,6 +64,10 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_package.py",
         "tests/test_rcaeval.py",
     ),
+    2: (
+        "docs/decisions/0005-phase-2-evidence-contracts.md",
+        "docs/devlog/0002-phase-2-evidence-contracts.md",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -109,7 +113,7 @@ PHASE1_CI_RUNS = frozenset(
         "git show --check --oneline --format=fuller HEAD",
     }
 )
-EXPECTED_CI_RUNS_BY_PHASE = {0: PHASE0_CI_RUNS, 1: PHASE1_CI_RUNS}
+EXPECTED_CI_RUNS_BY_PHASE = {0: PHASE0_CI_RUNS, 1: PHASE1_CI_RUNS, 2: PHASE1_CI_RUNS}
 BASE_REQUIRED_ACTIONS = frozenset(
     {
         "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
@@ -119,7 +123,11 @@ BASE_REQUIRED_ACTIONS = frozenset(
 PHASE1_REQUIRED_ACTIONS = BASE_REQUIRED_ACTIONS | {
     "astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990"
 }
-REQUIRED_ACTIONS_BY_PHASE = {0: BASE_REQUIRED_ACTIONS, 1: PHASE1_REQUIRED_ACTIONS}
+REQUIRED_ACTIONS_BY_PHASE = {
+    0: BASE_REQUIRED_ACTIONS,
+    1: PHASE1_REQUIRED_ACTIONS,
+    2: PHASE1_REQUIRED_ACTIONS,
+}
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
     "app",
@@ -159,7 +167,12 @@ def _current_phase(errors: list[str]) -> int | None:
 
 
 def _validate_required_files(phase: int, errors: list[str]) -> None:
-    for relative in BASE_REQUIRED_FILES + PHASE_REQUIRED_FILES[phase]:
+    required = BASE_REQUIRED_FILES + tuple(
+        relative
+        for phase_number in range(phase + 1)
+        for relative in PHASE_REQUIRED_FILES[phase_number]
+    )
+    for relative in required:
         if not (ROOT / relative).is_file():
             errors.append(f"missing required file: {relative}")
 
@@ -266,7 +279,7 @@ def _validate_settings(errors: list[str]) -> None:
 
 def _validate_phase_scope(phase: int, errors: list[str]) -> None:
     forbidden = set(FORBIDDEN_PHASE0_PATHS)
-    if phase == 1:
+    if phase >= 1:
         forbidden -= PHASE1_SCOPE_EXCEPTIONS
     for relative in sorted(forbidden):
         if (ROOT / relative).exists():
@@ -477,7 +490,7 @@ def main() -> int:
         _validate_phase_scope(phase, errors)
         _validate_provenance(errors)
         _validate_dataset_policy(errors)
-        if phase == 1:
+        if phase >= 1:
             _validate_phase1_tooling(errors)
         _validate_ci(phase, errors)
 

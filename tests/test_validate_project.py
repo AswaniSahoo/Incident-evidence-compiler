@@ -19,6 +19,7 @@ PYTHON_PIN = "a26af69be951a213d495a4c3e4e4022e16d87065"
 UV_PIN = "11f9893b081a58869d3b5fccaea48c9e9e46f990"
 PHASE0_RUNS = tuple(sorted(validator.PHASE0_CI_RUNS))
 PHASE1_RUNS = tuple(sorted(validator.PHASE1_CI_RUNS))
+PHASE2_RUNS = tuple(sorted(validator.EXPECTED_CI_RUNS_BY_PHASE[2]))
 
 
 def workflow(
@@ -68,6 +69,12 @@ class ValidatorFixtureTests(unittest.TestCase):
         self.write_workflow(workflow(runs=PHASE0_RUNS, include_uv=False))
         errors: list[str] = []
         validator._validate_ci(0, errors)
+        self.assertEqual(errors, [])
+
+    def test_accepts_phase2_ci_contract(self) -> None:
+        self.write_workflow(workflow(runs=PHASE2_RUNS))
+        errors: list[str] = []
+        validator._validate_ci(2, errors)
         self.assertEqual(errors, [])
 
     def test_rejects_missing_commented_echoed_or_env_gate(self) -> None:
@@ -157,7 +164,7 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(2)
+        self.write_context(3)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
@@ -172,6 +179,33 @@ class PhasePolicyTests(unittest.TestCase):
         errors: list[str] = []
         validator._validate_required_files(1, errors)
         self.assertEqual(errors, [f"missing required file: {omitted}"])
+
+    def test_phase2_required_files_are_cumulative(self) -> None:
+        cumulative = (
+            validator.BASE_REQUIRED_FILES
+            + validator.PHASE_REQUIRED_FILES[1]
+            + validator.PHASE_REQUIRED_FILES[2]
+        )
+        for relative in cumulative:
+            target = validator.ROOT / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("fixture\n", encoding="utf-8")
+        omitted = validator.PHASE_REQUIRED_FILES[1][0]
+        (validator.ROOT / omitted).unlink()
+        errors: list[str] = []
+        validator._validate_required_files(2, errors)
+        self.assertEqual(errors, [f"missing required file: {omitted}"])
+
+    def test_phase2_keeps_phase1_scope_and_tooling(self) -> None:
+        (validator.ROOT / "src").mkdir()
+        (validator.ROOT / "pyproject.toml").write_text("fixture\n", encoding="utf-8")
+        (validator.ROOT / "uv.lock").write_text("fixture\n", encoding="utf-8")
+        errors: list[str] = []
+        validator._validate_phase_scope(2, errors)
+        self.assertEqual(errors, [])
+        (validator.ROOT / "eval").mkdir()
+        validator._validate_phase_scope(2, errors)
+        self.assertTrue(any("eval" in error for error in errors))
 
     def write_tooling(self, *, dependencies: str = "[]", lock_tools: bool = True) -> None:
         (validator.ROOT / "pyproject.toml").write_text(
