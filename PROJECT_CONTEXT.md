@@ -4,11 +4,11 @@ Last verified: 2026-07-16
 
 ## Current phase
 
-Phase 0 complete — independent repository foundation accepted.
+Phase 1 — domain contracts and deterministic baseline.
 
 ## Current objective
 
-Preserve the validated foundation and wait for Aswani before beginning the Phase 1 domain baseline.
+Implement a framework-independent incident domain, a deterministic metric-shift baseline with explicit abstention, and a bounded label-safe RCAEval RE2 adapter using synthetic fixtures.
 
 ## Product
 
@@ -17,40 +17,44 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 ## Accepted decisions
 
 - Independent rewrite; no upstream source code is copied.
-- RCAEval RE2 is the planned benchmark, subject to a pinned dataset/license manifest in Phase 1.
-- PostgreSQL will be the durable source of truth and initial job queue.
-- Redis is initially limited to disposable cross-process admission control.
+- RCAEval release `1.2.0` is pinned at commit `bc49dbd85bd14032101fb9a69a5a37e9d6d55178`.
+- RE2-OB is development/calibration, RE2-TT is sealed by default, and RE2-SS is reserved.
+- Raw RCAEval data is not committed or redistributed; the pinned upstream RCAEval repository states MIT for the authors' code/datasets while Zenodo archive metadata states `cc-by-4.0`, and both notices are documented.
+- Phase 1 runtime code uses only the Python 3.12 standard library; Ruff `0.15.13` and mypy `2.1.0` are pinned development tools.
+- The baseline emits ranked suspicion or abstention, never a causal or tri-state verification claim.
+- PostgreSQL will be the durable source of truth and initial job queue in a later phase.
+- Redis is initially limited to disposable cross-process admission control in a later phase.
 - Model-generated SQL, shell commands, remediation, generic chat, LangGraph, MCP, and multi-agent runtime behavior are out of v1 scope.
-- Gemini is accessed through one asynchronous provider interface; tests use a deterministic fake.
+- Gemini is accessed through one asynchronous provider interface in a later phase; tests use a deterministic fake.
 - Every accepted material conclusion must resolve to same-tenant, same-run evidence and a passing verifier trace.
 
 ## Provenance
 
-Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at commit `96cbbd3a7e4f012240c48c1fead9c838e9bb1b6b`. The upstream repository has no license file as verified on 2026-07-16. It remains a read-only audit reference.
+Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at commit `96cbbd3a7e4f012240c48c1fead9c838e9bb1b6b`. It remains a read-only audit reference. RCAEval dataset provenance is recorded in `docs/datasets/rcaeval-re2.md`.
 
 ## Current repository state
 
-Phase 0 contains governance, documentation, and standard-library tests only. Product scope/provenance commit: `e1391acda89e8294203ed5fec2fce5e42b86a2c8`. Kiro governance/validation commit: `c6fbf567344c12fc95ad359e695eb90633019f61`. No application package, runtime dependencies, benchmark data, cloud resources, remote, public license, or push has been added.
+Local branch `phase/01-domain-baseline` starts from accepted Phase 0 commit `02584ce`. No remote is configured and no push will occur until Aswani decides after Phase 3 or later. No application code or raw benchmark data has been added yet.
 
 ## Validation
 
-The following passed against committed `HEAD` `c6fbf567344c12fc95ad359e695eb90633019f61`:
+Phase 1 must first make project governance phase-aware, then pass this clean-checkout gate:
 
-- `git show --check --oneline --format=fuller HEAD`
-- `python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py`
-- `python -m unittest discover -s tests -p "test_*.py" -v` — 16 tests
-- `python scripts/validate_project.py`
-- `python scripts/validate_project.py --quick`
+- `uv sync --locked`
+- `uv run python -m unittest discover -s tests -p "test_*.py" -v`
+- `uv run ruff check .`
+- `uv run ruff format --check .`
+- `uv run mypy src tests`
+- `uv run python scripts/validate_project.py`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
-
-Independent pre-commit review returned `PRECOMMIT_APPROVED`. Hosted CI was not run because this repository intentionally has no remote; Aswani will push manually.
+- Independent review recorded in the Phase 1 devlog
 
 ## Open decisions
 
 - Public license for this independently written repository.
-- Exact Phase 1 package/dependency versions after the first code contract is approved.
-- Final RCAEval data split and leakage policy after inspecting the pinned release.
+- Whether and when Aswani wants to download the 1.19 GB RE2-OB archive for real-data integration.
+- Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
 
 ## Next action
 
-After Aswani confirms Phase 1, create `phase/01-domain-baseline` and implement only domain contracts, a pinned dataset manifest, leakage checks, and a deterministic telemetry-only baseline. Do not push; Aswani will push manually.
+Commit the Phase 1 decision pack, then implement pure domain value objects and the deterministic baseline with synthetic tests. Do not download RCAEval data and do not push.
