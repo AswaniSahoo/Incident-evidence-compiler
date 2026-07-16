@@ -56,5 +56,17 @@ class InvalidHypothesisError(DomainValidationError):
     code = "invalid_hypothesis"
 
 
+class InvalidChangeEventError(DomainValidationError):
+    code = "invalid_change_event"
+
+
+class InvalidChangeEventLedgerError(DomainValidationError):
+    code = "invalid_change_event_ledger"
+
+
+class InvalidChangeHypothesisError(DomainValidationError):
+    code = "invalid_change_hypothesis"
+
+
 class CanonicalSerializationError(DomainValidationError):
     code = "canonical_serialization_failed"
