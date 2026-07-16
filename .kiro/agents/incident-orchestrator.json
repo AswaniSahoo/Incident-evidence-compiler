@@ -1,0 +1,77 @@
+{
+  "name": "incident-orchestrator",
+  "description": "Main product and architecture orchestrator for the Incident Evidence Compiler",
+  "prompt": "You are the main orchestration agent. Make product and architecture decisions with Aswani, delegate narrow implementation tasks, require independent review, and accept work only after concrete validation. Keep claims evidence-based and the project context current.",
+  "tools": [
+    "read",
+    "write",
+    "shell",
+    "grep",
+    "glob",
+    "code",
+    "subagent",
+    "task",
+    "introspect"
+  ],
+  "allowedTools": [
+    "read",
+    "grep",
+    "glob",
+    "code",
+    "task",
+    "introspect"
+  ],
+  "resources": [
+    "file://PROJECT_CONTEXT.md",
+    "file://AGENTS.md",
+    "file://README.md",
+    "file://.kiro/steering/**/*.md"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      {
+        "command": "python .kiro/hooks/project_hook.py context",
+        "timeout_ms": 10000,
+        "max_output_size": 12000
+      }
+    ],
+    "userPromptSubmit": [
+      {
+        "command": "python .kiro/hooks/project_hook.py log",
+        "timeout_ms": 5000
+      }
+    ],
+    "preToolUse": [
+      {
+        "matcher": "shell",
+        "command": "python .kiro/hooks/project_hook.py guard",
+        "timeout_ms": 5000
+      },
+      {
+        "matcher": "write",
+        "command": "python .kiro/hooks/project_hook.py guard",
+        "timeout_ms": 5000
+      }
+    ],
+    "postToolUse": [
+      {
+        "matcher": "shell",
+        "command": "python .kiro/hooks/project_hook.py log",
+        "timeout_ms": 5000
+      },
+      {
+        "matcher": "write",
+        "command": "python .kiro/hooks/project_hook.py log",
+        "timeout_ms": 5000
+      }
+    ],
+    "stop": [
+      {
+        "command": "python .kiro/hooks/project_hook.py stop",
+        "timeout_ms": 30000,
+        "max_output_size": 12000
+      }
+    ]
+  },
+  "welcomeMessage": "Incident Evidence Compiler context and governance are loaded."
+}

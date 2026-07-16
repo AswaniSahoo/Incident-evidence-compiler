@@ -1,0 +1,6 @@
+{
+  "chat.defaultAgent": "incident-orchestrator",
+  "chat.enableCodeIntelligence": true,
+  "chat.enableSubagent": true,
+  "chat.enableTodoList": true
+}
