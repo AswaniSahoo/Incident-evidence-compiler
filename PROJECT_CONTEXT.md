@@ -4,7 +4,7 @@ Last verified: 2026-07-16
 
 ## Current phase
 
-Phase 2 — immutable metric evidence and deterministic verification.
+Phase 2 — immutable metric evidence and deterministic verification — complete.
 
 ## Current objective
 
@@ -37,7 +37,7 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Phase 1 is accepted at local commit `8d0ba39`. Phase 2 work is isolated on `phase/02-evidence-contracts`. The decision contract is recorded in ADR 0005. No raw benchmark data has been downloaded and no remote is configured.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 decision, ledger, and verifier commits are `c167a54`, `b49866a`, and `19e3c90` on `phase/02-evidence-contracts`; final evidence commit is pending. No raw benchmark data has been downloaded and no remote is configured.
 
 ## Validation
 
@@ -63,4 +63,4 @@ Phase 2 uses the same locked clean-checkout gate as Phase 1:
 
 ## Next action
 
-Implement ADR 0005 in parallel evidence, verifier, and governance workstreams; integrate, run the locked gate, obtain one independent review, fix concrete blockers once, and create scoped local commits. Do not download datasets, configure a remote, or push.
+Finalize the Phase 2 evidence commit, verify exact HEAD, fast-forward local `main`, and open a clean Phase 3 decision branch. Choose the next bounded vertical slice before implementation; do not assume whether it is another telemetry type, persistence, or the model-provider boundary. Do not download datasets, configure a remote, or push.
