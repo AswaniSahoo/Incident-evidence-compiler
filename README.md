@@ -4,11 +4,16 @@ A clean-room, production-oriented learning project for evidence-grounded inciden
 
 ## Status
 
-**Phase 1 — domain contracts, deterministic baseline, and bounded RCAEval adapter.**
+**Phase 3 — bounded change-event co-occurrence evidence (complete).**
 
-The repository now contains a standard-library-only Python domain, a replayable robust
-metric-shift baseline with typed abstention, and a label-safe adapter for locally extracted
-RCAEval RE2 data. Only synthetic benchmark fixtures are committed.
+The repository contains a standard-library-only Python domain: a replayable robust metric-shift
+baseline with typed abstention, an immutable content-addressed metric evidence ledger, a
+deterministic metric-shift verifier, a separate bounded change-event ledger with a tri-state
+temporal co-occurrence verifier, canonical leakage-safe serialization, and a label-safe adapter
+for locally extracted RCAEval RE2 data. There is no infrastructure, API, or model dependency yet.
+Only synthetic benchmark fixtures are committed; raw RCAEval data is never committed.
+
+The active plan is a two-week public sprint to an evaluated v1 — see [`MASTER-PLAN.md`](MASTER-PLAN.md).
 
 ## Why this project exists
 
@@ -33,7 +38,12 @@ This project asks:
 
 This is an independent rewrite. It contains no source copied from `yashprogrammer/EnterpriseRAG_live`. That public repository was audited as a learning prototype and is cited in [`docs/provenance.md`](docs/provenance.md).
 
-No public license has been selected for this new repository yet. Do not publish it until that decision is recorded.
+## License
+
+This project's source, documentation, and configuration are licensed under the Apache License 2.0
+— see [`LICENSE`](LICENSE) and [`docs/decisions/0008-apache-2.0-license.md`](docs/decisions/0008-apache-2.0-license.md).
+RCAEval dataset licensing is separate and documented in
+[`docs/datasets/rcaeval-re2.md`](docs/datasets/rcaeval-re2.md); raw benchmark data is never committed.
 
 ## Current validation
 
