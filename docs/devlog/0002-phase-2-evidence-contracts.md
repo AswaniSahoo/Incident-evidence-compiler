@@ -1,7 +1,7 @@
 # Phase 2: Evidence Before Explanations
 
 - Date: 2026-07-16
-- Status: In progress
+- Status: Complete
 
 ## Problem
 
@@ -42,7 +42,20 @@ Use synthetic Phase 1 results to prove:
 
 ## Evidence
 
-Implementation, validation, review, and commit evidence are pending. No credentials, external service, model, database, dataset download, remote, or push is required for this phase.
+Implementation completed locally without credentials, external services, model calls, database access, dataset downloads, remote configuration, or push.
+
+- Three parallel `gpt-5.6-sol` implementation agents produced isolated ledger, verifier, and serialization workstreams; a dependent integration inspector identified shared-boundary defects before acceptance.
+- The integration correction added authoritative forged-ledger reconstruction, content-ID recomputation, deep hypothesis reconstruction, public exports, cumulative governance, and serializer gate consistency.
+- The one independent `gpt-5.6-sol` review returned `NEEDS_CHANGES` for three medium fail-closed gaps: malformed exact Phase 1 result objects could leak `AttributeError`, malformed exact verification results could leak `AttributeError`, and forged `UNKNOWN` traces could pair impossible reasons with observed directions.
+- Those three findings were fixed once and covered by focused regressions. No repeated review was launched.
+- `uv sync --locked` passed with eight resolved development/build packages and no runtime dependencies.
+- Locked compilation passed.
+- `uv run --locked python -m unittest discover -s tests -p "test_*.py" -v` passed all 133 tests.
+- Ruff check and format passed with 31 files formatted.
+- Strict mypy passed over 29 source files.
+- The full project validator and Kiro agent validation passed.
+- `git diff --check` passed and `git remote -v` produced no output.
+- Implementation commits are `b49866a` (`feat: add immutable metric evidence ledger`) and `19e3c90` (`feat: add deterministic metric verifier`).
 
 ## Next question
 
