@@ -1,14 +1,14 @@
 # Project Context
 
-Last verified: 2026-07-16
+Last verified: 2026-07-17
 
 ## Current phase
 
-Phase 2 — immutable metric evidence and deterministic verification — complete.
+Phase 3 — bounded change-event co-occurrence evidence — complete.
 
 ## Current objective
 
-Compile Phase 1 metric evaluations into a tenant/incident/run-bound immutable evidence ledger, verify a restricted descriptive hypothesis with exact `SUPPORTED`, `REFUTED`, or `UNKNOWN` semantics, and serialize both artifacts canonically without adding infrastructure or model dependencies.
+Extend the immutable evidence ledger with bounded change/deployment events, bind them to the same tenant/incident/run context, and verify a restricted temporal co-occurrence hypothesis deterministically as `SUPPORTED`, `REFUTED`, or `UNKNOWN` — as descriptive timing only, never a causal claim — while serializing both artifacts canonically without adding infrastructure or model dependencies.
 
 ## Product
 
@@ -17,6 +17,7 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 ## Accepted decisions
 
 - Independent rewrite; no upstream source code is copied.
+- The repository's own code, docs, and config are licensed under Apache-2.0 (ADR 0008); RCAEval data is separately licensed and never committed.
 - RCAEval release `1.2.0` is pinned at commit `bc49dbd85bd14032101fb9a69a5a37e9d6d55178`.
 - RE2-OB is development/calibration, RE2-TT is sealed by default, and RE2-SS is reserved.
 - Raw RCAEval data is not committed or redistributed; the pinned upstream RCAEval repository states MIT for the authors' code/datasets while Zenodo archive metadata states `cc-by-4.0`, and both notices are documented.
@@ -25,6 +26,9 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 - Phase 2 binds every metric evaluation to immutable provenance, uses content-bound evidence IDs, and verifies only flat descriptive increase/decrease predicates.
 - The verifier uses the frozen baseline minimum score inclusively; global ranking margin remains diagnostic and does not establish or suppress a signal-specific descriptive observation.
 - Context mismatch and causal semantics fail closed as `UNKNOWN`; invalid contracts raise stable leakage-safe domain errors.
+- Phase 3 adds bounded change/deployment events as a separate `change-event-ledger.v1` with content-bound IDs under a distinct domain separator, leaving the frozen metric ledger and its IDs unchanged.
+- Change events are verified as descriptive temporal co-occurrence only, independently of metric shifts; no cross-signal correlation and no causal inference.
+- Change co-occurrence semantics are three-valued: in-phase presence is `SUPPORTED`, presence recorded only outside the asserted phase is `REFUTED` (the ledger is the authoritative record of observed changes), and total absence is `UNKNOWN`.
 - PostgreSQL will be the durable source of truth and initial job queue in a later phase.
 - Redis is initially limited to disposable cross-process admission control in a later phase.
 - Model-generated SQL, shell commands, remediation, generic chat, LangGraph, MCP, and multi-agent runtime behavior are out of v1 scope.
@@ -37,11 +41,11 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Phase 1 is accepted at local commit `8d0ba39`. Phase 2 decision, ledger, and verifier commits are `c167a54`, `b49866a`, and `19e3c90` on `phase/02-evidence-contracts`; completion evidence is recorded in the Phase 2 devlog and final branch commit. No raw benchmark data has been downloaded and no remote is configured.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. Phase 3 change-event decision, ledger/contracts, verifier, serialization, and validation-evidence commits land on branch `phase/03-change-events`, which is fast-forwarded into `main` as the accepted Phase 3 boundary. The repository is published under Apache-2.0 to the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`). No raw benchmark data has been downloaded; only synthetic fixtures are committed.
 
 ## Validation
 
-Phase 2 uses the same locked clean-checkout gate as Phase 1:
+Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -52,15 +56,14 @@ Phase 2 uses the same locked clean-checkout gate as Phase 1:
 - `uv run --locked python scripts/validate_project.py`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 - `git diff --check`
-- One independent Phase 2 implementation review
+- One independent Phase 3 implementation review
 
 ## Open decisions
 
-- Public license for this independently written repository.
-- Whether and when Aswani wants to download the 1.19 GB RE2-OB archive for real-data integration.
+- Confirm and record the guardrailed real-data ADR (0009): download RE2-OB now, derive a small sanitized label-free committed fixture, ground development in real shapes, keep CI hermetic on fixtures/fakes, and keep RE2-TT sealed.
 - Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
-- Which bounded telemetry type extends the metric-only evidence ledger after Phase 2.
+- Order of post-publish slices: the `evidence.py` refactor first, then the durable persistence boundary (Phase 4), per MASTER-PLAN.
 
 ## Next action
 
-Finalize the Phase 2 evidence commit, verify exact HEAD, fast-forward local `main`, and open a clean Phase 3 decision branch. Choose the next bounded vertical slice before implementation; do not assume whether it is another telemetry type, persistence, or the model-provider boundary. Do not download datasets, configure a remote, or push.
+Phase 3 is committed and `main` is published under Apache-2.0. Next: (1) split the oversized `evidence.py` into focused modules as a behavior-preserving refactor commit; (2) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (3) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.

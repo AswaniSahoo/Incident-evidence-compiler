@@ -42,3 +42,6 @@ logs/
 
 # Local compose overrides
 *.override.yml
+
+# AI assistant local traces (never published)
+CLAUDE.md
