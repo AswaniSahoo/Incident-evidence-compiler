@@ -4,11 +4,11 @@ Last verified: 2026-07-16
 
 ## Current phase
 
-Phase 0 — independent-review fixes validated; final re-review and root commit pending.
+Phase 0 complete — independent repository foundation accepted.
 
 ## Current objective
 
-Close the foundation phase with independent approval, a reviewed foundation commit, and a small evidence update before application code is written.
+Preserve the validated foundation and wait for Aswani before beginning the Phase 1 domain baseline.
 
 ## Product
 
@@ -30,19 +30,20 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Governance, documentation, and standard-library hook tests only. No application package, runtime dependencies, benchmark data, cloud resources, remote, or public license have been added.
+Phase 0 contains governance, documentation, and standard-library tests only. Product scope/provenance commit: `e1391acda89e8294203ed5fec2fce5e42b86a2c8`. Kiro governance/validation commit: `c6fbf567344c12fc95ad359e695eb90633019f61`. No application package, runtime dependencies, benchmark data, cloud resources, remote, public license, or push has been added.
 
 ## Validation
 
-The Phase 0 local gate is:
+The following passed against committed `HEAD` `c6fbf567344c12fc95ad359e695eb90633019f61`:
 
+- `git show --check --oneline --format=fuller HEAD`
 - `python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py`
-- `python -m unittest discover -s tests -p "test_*.py" -v`
+- `python -m unittest discover -s tests -p "test_*.py" -v` — 16 tests
 - `python scripts/validate_project.py`
 - `python scripts/validate_project.py --quick`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 
-All passed after the first independent review findings were fixed. Root-commit whitespace evidence remains pending until the commit exists.
+Independent pre-commit review returned `PRECOMMIT_APPROVED`. Hosted CI was not run because this repository intentionally has no remote; Aswani will push manually.
 
 ## Open decisions
 
@@ -52,4 +53,4 @@ All passed after the first independent review findings were fixed. Root-commit w
 
 ## Next action
 
-Obtain final independent review approval, commit the Phase 0 foundation, point local `main` at the accepted root commit, and stop before Phase 1 design or implementation.
+After Aswani confirms Phase 1, create `phase/01-domain-baseline` and implement only domain contracts, a pinned dataset manifest, leakage checks, and a deterministic telemetry-only baseline. Do not push; Aswani will push manually.

@@ -1,7 +1,7 @@
 # Phase 0: Foundation Before Features
 
 - Date: 2026-07-16
-- Status: Ready for final independent re-review and commit
+- Status: Complete
 
 ## Problem
 
@@ -29,39 +29,42 @@ Phase 0 creates:
 - Kiro steering and a local orchestrator configuration
 - Sanitized, size-bounded lifecycle event logging
 - Approval-gated shell/write tools with defense-in-depth Git and write-tool guards
-- Standard-library hook behavior tests
+- Standard-library hook and validator tests
 - A dependency-free governance validator
 - Product, provenance, architecture, and workflow records
-- A minimal CI workflow
+- A minimal CI workflow with immutable action references
 
-The hooks are not a process sandbox. In particular, a shell can express writes in ways a command regex cannot safely classify. The shell and write tools therefore remain outside `allowedTools`; the hook catches known dangerous Git forms and confines the dedicated write tool to the repository.
+The hooks are not a process sandbox. A shell can express writes in ways no command classifier can safely enumerate. Shell and write therefore remain outside `allowedTools`; token-aware checks catch common dangerous Git forms and the dedicated write tool is confined to the repository.
 
 ## Privacy decision
 
-Hook logs contain timestamps, one-way session fingerprints, sanitized hook/tool names, branch category, commit, dirty state, and Git status only. Raw session IDs, raw branch names, prompt bodies, tool inputs, tool outputs, secrets, and user data are excluded. Legacy-schema logs are deleted before a new event is appended. Logs rotate at 1 MB, use owner-only mode where the operating system supports it, remain local, and are ignored by Git.
+Hook logs contain timestamps, one-way session fingerprints, allow-listed event metadata, sanitized tool names, branch category, commit, dirty state, and Git status only. Raw session IDs, raw branch names, prompt bodies, tool inputs, tool outputs, secrets, and user data are excluded. Invalid or legacy-schema logs are deleted before append, and every new record is validated before persistence. Logs rotate at 1 MB, use owner-only mode where supported, remain local, and are ignored by Git.
 
 ## Review findings and response
 
-The first independent review returned `NEEDS_CHANGES`. It correctly found that the original guard was bypassable while documentation overstated it, CI lacked behavior tests, malformed covered events failed open, and raw session/branch metadata could leak sensitive naming. The implementation and policy were changed rather than waiving those findings.
+Independent review initially returned `NEEDS_CHANGES`. It found overstated guard guarantees, weak CI validation, fail-open events, unsafe legacy logs, mutable action references, branch-dependent tests, missing Git shorthand cases, and false-positive YAML gate detection. Each concrete finding was fixed and tested rather than waived. The final blocker-only review returned `PRECOMMIT_APPROVED`.
 
 ## Evidence
 
-Executed locally on Windows from the new repository:
+Local commits:
 
+- `e1391acda89e8294203ed5fec2fce5e42b86a2c8` — `docs: define incident compiler scope and provenance`
+- `c6fbf567344c12fc95ad359e695eb90633019f61` — `chore: add Kiro governance and validation gates`
+
+Executed on Windows against committed `HEAD` `c6fbf567344c12fc95ad359e695eb90633019f61`:
+
+- `git show --check --oneline --format=fuller HEAD` — passed
 - `python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py` — passed
 - `python -m unittest discover -s tests -p "test_*.py" -v` — 16 tests passed
 - `python scripts/validate_project.py` — passed in full mode
 - `python scripts/validate_project.py --quick` — passed
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json` — exit code 0
-- Manual hook smoke tests verified blocked push and out-of-workspace write events returned exit code 2
 - The live legacy log was scrubbed; its replacement passed the privacy schema check and remained ignored by Git
-- GitHub Actions references were resolved through GitHub and pinned to full commit SHAs
-
-Final independent re-review and root-commit evidence remain pending.
+- `actions/checkout` and `actions/setup-python` were resolved through GitHub and pinned to full commit SHAs
 
 ## Limitations
 
-Governance does not guarantee correctness or eliminate hallucination. Regex guards reduce mistakes but do not sandbox a shell. Kiro's own agent validator is part of the local phase gate but is not installed in the minimal GitHub Actions job; CI separately checks JSON structure and executes hook behavior tests.
+Governance does not guarantee correctness or eliminate hallucination. The hook classifier reduces mistakes but does not sandbox a shell. Kiro's validator is a local gate rather than a GitHub Actions dependency. Hosted CI was not run because the repository has no remote, and no public license has been chosen. Aswani will manually push when ready.
 
 ## Next question
 
