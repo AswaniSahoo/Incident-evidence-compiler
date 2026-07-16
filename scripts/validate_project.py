@@ -75,6 +75,16 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_serialization.py",
         "tests/test_verifier.py",
     ),
+    3: (
+        "docs/decisions/0006-phase-3-change-events.md",
+        "docs/devlog/0003-phase-3-change-events.md",
+        "src/incident_evidence_compiler/domain/changes.py",
+        "src/incident_evidence_compiler/domain/change_evidence.py",
+        "src/incident_evidence_compiler/domain/change_hypotheses.py",
+        "src/incident_evidence_compiler/domain/change_verifier.py",
+        "tests/test_changes.py",
+        "tests/test_change_verifier.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -120,7 +130,12 @@ PHASE1_CI_RUNS = frozenset(
         "git show --check --oneline --format=fuller HEAD",
     }
 )
-EXPECTED_CI_RUNS_BY_PHASE = {0: PHASE0_CI_RUNS, 1: PHASE1_CI_RUNS, 2: PHASE1_CI_RUNS}
+EXPECTED_CI_RUNS_BY_PHASE = {
+    0: PHASE0_CI_RUNS,
+    1: PHASE1_CI_RUNS,
+    2: PHASE1_CI_RUNS,
+    3: PHASE1_CI_RUNS,
+}
 BASE_REQUIRED_ACTIONS = frozenset(
     {
         "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5",
@@ -134,6 +149,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     0: BASE_REQUIRED_ACTIONS,
     1: PHASE1_REQUIRED_ACTIONS,
     2: PHASE1_REQUIRED_ACTIONS,
+    3: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -152,6 +168,7 @@ FORBIDDEN_PHASE0_PATHS = (
     "NOTICE",
 )
 PHASE1_SCOPE_EXCEPTIONS = {"src", "pyproject.toml", "uv.lock"}
+LICENSE_ARTIFACTS = {"LICENSE", "COPYING", "NOTICE"}
 TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
 
 
@@ -284,10 +301,17 @@ def _validate_settings(errors: list[str]) -> None:
             errors.append(f"{relative} must set {key} to {expected!r}")
 
 
+def _license_recorded() -> bool:
+    """True once a license decision ADR exists, which unblocks license artifacts."""
+    return any((ROOT / "docs" / "decisions").glob("*license*.md"))
+
+
 def _validate_phase_scope(phase: int, errors: list[str]) -> None:
     forbidden = set(FORBIDDEN_PHASE0_PATHS)
     if phase >= 1:
         forbidden -= PHASE1_SCOPE_EXCEPTIONS
+    if _license_recorded():
+        forbidden -= LICENSE_ARTIFACTS
     for relative in sorted(forbidden):
         if (ROOT / relative).exists():
             errors.append(
