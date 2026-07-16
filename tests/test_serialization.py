@@ -14,6 +14,26 @@ from incident_evidence_compiler.domain.baseline import (
     SignalBaselineInput,
     rank_metric_shifts,
 )
+from incident_evidence_compiler.domain.change_evidence import (
+    ChangeEventLedger,
+    compile_change_event_ledger,
+)
+from incident_evidence_compiler.domain.change_hypotheses import (
+    ChangeCooccurrencePredicate,
+    ChangeHypothesisDocument,
+    ChangePhaseConstraint,
+)
+from incident_evidence_compiler.domain.change_verifier import (
+    ChangeHypothesisVerificationResult,
+    ChangeUnknownReason,
+    verify_change_hypothesis,
+)
+from incident_evidence_compiler.domain.changes import (
+    ChangeEvent,
+    ChangeEventKey,
+    ChangeEventLog,
+    ChangeKind,
+)
 from incident_evidence_compiler.domain.evidence import (
     MetricEvidenceLedger,
     compile_metric_shift_ledger,
@@ -29,8 +49,11 @@ from incident_evidence_compiler.domain.identifiers import EvidenceId, IncidentId
 from incident_evidence_compiler.domain.incidents import IncidentWindow
 from incident_evidence_compiler.domain.metrics import MetricPoint, MetricSignal, SignalKey
 from incident_evidence_compiler.domain.serialization import (
+    CHANGE_VERIFICATION_SCHEMA_VERSION,
     VERIFICATION_SCHEMA_VERSION,
     CanonicalSerializationError,
+    change_ledger_json,
+    change_verification_json,
     ledger_json,
     verification_json,
 )
@@ -580,6 +603,193 @@ class VerificationSerializerAdversarialTests(unittest.TestCase):
                 result, predicate_results=(*result.predicate_results[:2], weak_without_direction)
             )
         )
+
+
+CHANGE_TENANT = TenantId("租户-01")
+CHANGE_INCIDENT = IncidentId("incident-01")
+CHANGE_RUN = RunId("run-01")
+
+
+def change_ledger_fixture(*, reverse: bool = False) -> ChangeEventLedger:
+    events = (
+        ChangeEvent(ChangeEventKey("z-svc"), ChangeKind.DEPLOYMENT, BASE + timedelta(minutes=5)),
+        ChangeEvent(ChangeEventKey("A-svc"), ChangeKind.ROLLBACK, BASE + timedelta(minutes=15)),
+        ChangeEvent(ChangeEventKey("é-svc"), ChangeKind.SCALING, BASE - timedelta(minutes=5)),
+    )
+    ordered = tuple(reversed(events)) if reverse else events
+    return compile_change_event_ledger(
+        CHANGE_TENANT, CHANGE_INCIDENT, CHANGE_RUN, window(), ChangeEventLog(ordered)
+    )
+
+
+def change_verification_fixture(ledger: ChangeEventLedger) -> ChangeHypothesisVerificationResult:
+    hypothesis = ChangeHypothesisDocument(
+        "hypothesis-\N{GREEK SMALL LETTER ALPHA}",
+        ledger.tenant_id,
+        ledger.incident_id,
+        ledger.run_id,
+        HypothesisSemantics.DESCRIPTIVE,
+        HypothesisComposition.ALL,
+        (
+            ChangeCooccurrencePredicate(
+                "p-supported",
+                ChangeEventKey("z-svc"),
+                ChangeKind.DEPLOYMENT,
+                ChangePhaseConstraint.PRE_INJECTION,
+            ),
+            ChangeCooccurrencePredicate(
+                "p-refuted",
+                ChangeEventKey("A-svc"),
+                ChangeKind.ROLLBACK,
+                ChangePhaseConstraint.PRE_INJECTION,
+            ),
+            ChangeCooccurrencePredicate(
+                "p-absent",
+                ChangeEventKey("missing"),
+                ChangeKind.SCALING,
+                ChangePhaseConstraint.WITHIN_WINDOW,
+            ),
+        ),
+    )
+    return verify_change_hypothesis(hypothesis, ledger)
+
+
+class ChangeSerializationTests(unittest.TestCase):
+    def test_change_ledger_json_is_byte_stable_canonical_and_order_invariant(self) -> None:
+        first = change_ledger_json(change_ledger_fixture())
+        repeated = change_ledger_json(change_ledger_fixture())
+        permuted = change_ledger_json(change_ledger_fixture(reverse=True))
+        self.assertEqual(first.encode("utf-8"), repeated.encode("utf-8"))
+        self.assertEqual(first.encode("utf-8"), permuted.encode("utf-8"))
+        self.assertIn("租户-01", first)
+        self.assertTrue(first.endswith("\n"))
+        self.assertFalse(first.endswith("\n\n"))
+        self.assertEqual(first.count("\n"), 1)
+        self.assertNotIn(": ", first)
+        self.assertNotIn(", ", first)
+        self.assertEqual(
+            first,
+            json.dumps(
+                parsed(first),
+                ensure_ascii=False,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+        )
+        payload = parsed(first)
+        entries = cast(list[dict[str, object]], payload["entries"])
+        self.assertEqual(
+            [(entry["event_key"], entry["phase"]) for entry in entries],
+            [
+                ("é-svc", "before_window"),
+                ("z-svc", "pre_injection"),
+                ("A-svc", "post_injection"),
+            ],
+        )
+
+    def test_change_ledger_key_snapshot(self) -> None:
+        payload = parsed(change_ledger_json(change_ledger_fixture()))
+        self.assertEqual(
+            set(payload),
+            {
+                "entries",
+                "incident_id",
+                "incident_window",
+                "run_id",
+                "schema_version",
+                "tenant_id",
+            },
+        )
+        self.assertEqual(payload["schema_version"], "change-event-ledger.v1")
+        entries = cast(list[dict[str, object]], payload["entries"])
+        self.assertEqual(
+            set(entries[0]),
+            {"event_key", "evidence_id", "kind", "occurred_at", "phase"},
+        )
+
+    def test_change_verification_json_snapshot_and_stability(self) -> None:
+        ledger = change_ledger_fixture()
+        first = change_verification_json(change_verification_fixture(ledger))
+        repeated = change_verification_json(change_verification_fixture(ledger))
+        self.assertEqual(first.encode("utf-8"), repeated.encode("utf-8"))
+        self.assertTrue(first.endswith("\n"))
+        self.assertEqual(first.count("\n"), 1)
+        payload = parsed(first)
+        self.assertEqual(
+            set(payload),
+            {
+                "composition",
+                "contradicting_evidence_ids",
+                "hypothesis_id",
+                "predicate_results",
+                "reason",
+                "schema_version",
+                "supporting_evidence_ids",
+                "verdict",
+            },
+        )
+        self.assertEqual(payload["schema_version"], CHANGE_VERIFICATION_SCHEMA_VERSION)
+        self.assertEqual(payload["verdict"], "refuted")
+        self.assertIsNone(payload["reason"])
+        results = cast(list[dict[str, object]], payload["predicate_results"])
+        self.assertEqual(
+            set(results[0]),
+            {
+                "contradicting_evidence_ids",
+                "phase_constraint",
+                "predicate_id",
+                "reason",
+                "supporting_evidence_ids",
+                "verdict",
+            },
+        )
+        self.assertEqual(
+            [result["verdict"] for result in results],
+            ["supported", "refuted", "unknown"],
+        )
+        self.assertNotIn("cause", first)
+        self.assertNotIn("root", first)
+
+    def test_change_ledger_serializer_rejects_forged_content_id(self) -> None:
+        ledger = change_ledger_fixture()
+        forged = replace(
+            ledger,
+            entries=(
+                replace(ledger.entries[0], evidence_id=EvidenceId(f"sha256:{'0' * 64}")),
+                *ledger.entries[1:],
+            ),
+        )
+        with self.assertRaises(CanonicalSerializationError):
+            change_ledger_json(forged)
+
+    def assert_change_failure(self, value: object) -> None:
+        with self.assertRaises(CanonicalSerializationError):
+            change_verification_json(cast(ChangeHypothesisVerificationResult, value))
+
+    def test_change_verification_serializer_rejects_inconsistent_results(self) -> None:
+        result = change_verification_fixture(change_ledger_fixture())
+        self.assert_change_failure(object.__new__(ChangeHypothesisVerificationResult))
+        self.assert_change_failure(replace(result, verdict=VerificationVerdict.SUPPORTED))
+        self.assert_change_failure(replace(result, supporting_evidence_ids=()))
+        stripped_support = replace(result.predicate_results[0], supporting_evidence_ids=())
+        self.assert_change_failure(
+            replace(result, predicate_results=(stripped_support, *result.predicate_results[1:]))
+        )
+        gate_leak = replace(
+            result.predicate_results[2], reason=ChangeUnknownReason.CONTEXT_MISMATCH
+        )
+        self.assert_change_failure(
+            replace(result, predicate_results=(*result.predicate_results[:2], gate_leak))
+        )
+
+    def test_change_predicate_result_repr_is_bounded(self) -> None:
+        result = change_verification_fixture(change_ledger_fixture())
+        text = repr(result) + "".join(repr(child) for child in result.predicate_results)
+        for canary in ("z-svc", "A-svc", "p-supported", CHANGE_TENANT.value):
+            self.assertNotIn(canary, text)
+        self.assertIn("predicate_count=3", text)
 
 
 if __name__ == "__main__":

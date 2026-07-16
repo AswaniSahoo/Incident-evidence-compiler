@@ -9,7 +9,27 @@ from enum import StrEnum
 from typing import NoReturn, cast
 
 from .baseline import AbstentionReason, BaselinePolicy, SuspicionCandidate
-from .errors import CanonicalSerializationError, InvalidEvidenceLedgerError
+from .change_evidence import (
+    SCHEMA_VERSION as CHANGE_LEDGER_SCHEMA_VERSION,
+)
+from .change_evidence import (
+    ChangeEventEvidence,
+    ChangeEventLedger,
+    ChangePhase,
+    validate_change_event_ledger,
+)
+from .change_hypotheses import ChangePhaseConstraint
+from .change_verifier import (
+    ChangeHypothesisVerificationResult,
+    ChangePredicateVerificationResult,
+    ChangeUnknownReason,
+)
+from .changes import ChangeEventKey, ChangeKind
+from .errors import (
+    CanonicalSerializationError,
+    InvalidChangeEventLedgerError,
+    InvalidEvidenceLedgerError,
+)
 from .evidence import (
     SCHEMA_VERSION as LEDGER_SCHEMA_VERSION,
 )
@@ -33,6 +53,7 @@ from .verifier import (
 )
 
 VERIFICATION_SCHEMA_VERSION = "metric-hypothesis-verification.v1"
+CHANGE_VERIFICATION_SCHEMA_VERSION = "change-cooccurrence-verification.v1"
 
 
 def _fail() -> NoReturn:
@@ -443,9 +464,204 @@ def verification_json(result: HypothesisVerificationResult) -> str:
         raise CanonicalSerializationError from None
 
 
+def _change_event_key(value: object) -> str:
+    key = _exact(value, ChangeEventKey)
+    return _text(key.value)
+
+
+def _change_entry_payload(value: object) -> dict[str, object]:
+    entry = _exact(value, ChangeEventEvidence)
+    return {
+        "event_key": _change_event_key(entry.event_key),
+        "evidence_id": _evidence_id(entry.evidence_id),
+        "kind": _enum_value(entry.kind, ChangeKind),
+        "occurred_at": _timestamp(entry.occurred_at),
+        "phase": _enum_value(entry.phase, ChangePhase),
+    }
+
+
+def _change_entries_payload(value: object) -> list[dict[str, object]]:
+    entries = _exact(value, tuple)
+    serialized = [_change_entry_payload(entry) for entry in entries]
+    order = [
+        (
+            cast(str, entry["occurred_at"]),
+            cast(str, entry["kind"]),
+            cast(str, entry["event_key"]),
+        )
+        for entry in serialized
+    ]
+    if order != sorted(order) or len(set(order)) != len(order):
+        _fail()
+    return serialized
+
+
+def _change_ledger_payload(value: object) -> dict[str, object]:
+    try:
+        ledger = validate_change_event_ledger(value)
+    except InvalidChangeEventLedgerError:
+        _fail()
+    schema_version = _text(ledger.schema_version)
+    if schema_version != CHANGE_LEDGER_SCHEMA_VERSION:
+        _fail()
+    return {
+        "entries": _change_entries_payload(ledger.entries),
+        "incident_id": _identifier(ledger.incident_id, IncidentId),
+        "incident_window": _window_payload(ledger.window),
+        "run_id": _identifier(ledger.run_id, RunId),
+        "schema_version": schema_version,
+        "tenant_id": _identifier(ledger.tenant_id, TenantId),
+    }
+
+
+def _change_optional_reason(value: object) -> str | None:
+    if value is None:
+        return None
+    return _enum_value(value, ChangeUnknownReason)
+
+
+def _change_predicate_result_payload(value: object) -> dict[str, object]:
+    result = _exact(value, ChangePredicateVerificationResult)
+    verdict = _enum_value(result.verdict, VerificationVerdict)
+    reason = _change_optional_reason(result.reason)
+    phase_constraint = _enum_value(result.phase_constraint, ChangePhaseConstraint)
+    supporting = _evidence_ids(result.supporting_evidence_ids)
+    contradicting = _evidence_ids(result.contradicting_evidence_ids)
+    if set(supporting) & set(contradicting):
+        _fail()
+    if verdict == VerificationVerdict.UNKNOWN.value:
+        if reason is None or supporting or contradicting:
+            _fail()
+    elif reason is not None:
+        _fail()
+    elif verdict == VerificationVerdict.SUPPORTED.value:
+        if not supporting or contradicting:
+            _fail()
+    elif verdict == VerificationVerdict.REFUTED.value:
+        if supporting or not contradicting:
+            _fail()
+    else:
+        _fail()
+    return {
+        "contradicting_evidence_ids": contradicting,
+        "phase_constraint": phase_constraint,
+        "predicate_id": _text(result.predicate_id),
+        "reason": reason,
+        "supporting_evidence_ids": supporting,
+        "verdict": verdict,
+    }
+
+
+def _change_predicate_results(value: object) -> list[dict[str, object]]:
+    results = _exact(value, tuple)
+    serialized = [_change_predicate_result_payload(result) for result in results]
+    predicate_ids = [cast(str, result["predicate_id"]) for result in serialized]
+    if len(set(predicate_ids)) != len(predicate_ids):
+        _fail()
+    return serialized
+
+
+def _change_verification_payload(value: object) -> dict[str, object]:
+    result = _exact(value, ChangeHypothesisVerificationResult)
+    composition = _enum_value(result.composition, HypothesisComposition)
+    verdict = _enum_value(result.verdict, VerificationVerdict)
+    reason = _change_optional_reason(result.reason)
+    predicates = _change_predicate_results(result.predicate_results)
+    if not predicates:
+        _fail()
+    supporting = _evidence_ids(result.supporting_evidence_ids)
+    contradicting = _evidence_ids(result.contradicting_evidence_ids)
+    expected_supporting = [
+        evidence_id
+        for predicate in predicates
+        for evidence_id in cast(list[str], predicate["supporting_evidence_ids"])
+    ]
+    expected_contradicting = [
+        evidence_id
+        for predicate in predicates
+        for evidence_id in cast(list[str], predicate["contradicting_evidence_ids"])
+    ]
+    if supporting != expected_supporting or contradicting != expected_contradicting:
+        _fail()
+
+    child_verdicts = tuple(cast(str, predicate["verdict"]) for predicate in predicates)
+    if composition == HypothesisComposition.ALL.value:
+        expected_verdict = (
+            VerificationVerdict.REFUTED.value
+            if VerificationVerdict.REFUTED.value in child_verdicts
+            else VerificationVerdict.UNKNOWN.value
+            if VerificationVerdict.UNKNOWN.value in child_verdicts
+            else VerificationVerdict.SUPPORTED.value
+        )
+    else:
+        expected_verdict = (
+            VerificationVerdict.SUPPORTED.value
+            if VerificationVerdict.SUPPORTED.value in child_verdicts
+            else VerificationVerdict.UNKNOWN.value
+            if VerificationVerdict.UNKNOWN.value in child_verdicts
+            else VerificationVerdict.REFUTED.value
+        )
+    if verdict != expected_verdict:
+        _fail()
+
+    gate_reasons = {
+        ChangeUnknownReason.CONTEXT_MISMATCH.value,
+        ChangeUnknownReason.CAUSAL_CLAIM_NOT_VERIFIABLE.value,
+    }
+    if reason is not None:
+        if reason not in gate_reasons or verdict != VerificationVerdict.UNKNOWN.value:
+            _fail()
+        if supporting or contradicting:
+            _fail()
+        if any(
+            predicate["verdict"] != VerificationVerdict.UNKNOWN.value
+            or predicate["reason"] != reason
+            or predicate["supporting_evidence_ids"]
+            or predicate["contradicting_evidence_ids"]
+            for predicate in predicates
+        ):
+            _fail()
+    elif any(predicate["reason"] in gate_reasons for predicate in predicates):
+        _fail()
+
+    return {
+        "composition": composition,
+        "contradicting_evidence_ids": contradicting,
+        "hypothesis_id": _text(result.hypothesis_id),
+        "predicate_results": predicates,
+        "reason": reason,
+        "schema_version": CHANGE_VERIFICATION_SCHEMA_VERSION,
+        "supporting_evidence_ids": supporting,
+        "verdict": verdict,
+    }
+
+
+def change_ledger_json(ledger: ChangeEventLedger) -> str:
+    """Serialize one validated change-event ledger canonically."""
+    try:
+        return _canonical_json(_change_ledger_payload(ledger))
+    except CanonicalSerializationError:
+        raise
+    except Exception:
+        raise CanonicalSerializationError from None
+
+
+def change_verification_json(result: ChangeHypothesisVerificationResult) -> str:
+    """Serialize one deterministic change-verification result canonically."""
+    try:
+        return _canonical_json(_change_verification_payload(result))
+    except CanonicalSerializationError:
+        raise
+    except Exception:
+        raise CanonicalSerializationError from None
+
+
 __all__ = [
+    "CHANGE_VERIFICATION_SCHEMA_VERSION",
     "VERIFICATION_SCHEMA_VERSION",
     "CanonicalSerializationError",
+    "change_ledger_json",
+    "change_verification_json",
     "ledger_json",
     "verification_json",
 ]

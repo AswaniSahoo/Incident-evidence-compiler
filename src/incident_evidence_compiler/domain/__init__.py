@@ -11,6 +11,36 @@ from .baseline import (
     SuspicionCandidate,
     rank_metric_shifts,
 )
+from .change_evidence import (
+    SCHEMA_VERSION as CHANGE_EVIDENCE_SCHEMA_VERSION,
+)
+from .change_evidence import (
+    ChangeEventEvidence,
+    ChangeEventLedger,
+    ChangePhase,
+    compile_change_event_ledger,
+    validate_change_event_ledger,
+)
+from .change_hypotheses import (
+    MAX_CHANGE_PREDICATES,
+    ChangeCooccurrencePredicate,
+    ChangeHypothesisDocument,
+    ChangePhaseConstraint,
+    validate_change_hypothesis_document,
+)
+from .change_verifier import (
+    ChangeHypothesisVerificationResult,
+    ChangePredicateVerificationResult,
+    ChangeUnknownReason,
+    verify_change_hypothesis,
+)
+from .changes import (
+    MAX_CHANGE_EVENTS,
+    ChangeEvent,
+    ChangeEventKey,
+    ChangeEventLog,
+    ChangeKind,
+)
 from .errors import (
     BaselineComputationError,
     CanonicalSerializationError,
@@ -18,6 +48,9 @@ from .errors import (
     DomainValidationError,
     DuplicateSignalError,
     InvalidBaselineConfigurationError,
+    InvalidChangeEventError,
+    InvalidChangeEventLedgerError,
+    InvalidChangeHypothesisError,
     InvalidEvidenceLedgerError,
     InvalidHypothesisError,
     InvalidIdentifierError,
@@ -49,7 +82,14 @@ from .hypotheses import (
 from .identifiers import CaseId, EvidenceId, IncidentId, RunId, TenantId
 from .incidents import IncidentWindow
 from .metrics import MetricPoint, MetricSignal, SignalKey
-from .serialization import VERIFICATION_SCHEMA_VERSION, ledger_json, verification_json
+from .serialization import (
+    CHANGE_VERIFICATION_SCHEMA_VERSION,
+    VERIFICATION_SCHEMA_VERSION,
+    change_ledger_json,
+    change_verification_json,
+    ledger_json,
+    verification_json,
+)
 from .verifier import (
     HypothesisVerificationResult,
     ObservedDirection,
@@ -61,7 +101,11 @@ from .verifier import (
 )
 
 __all__ = [
+    "CHANGE_EVIDENCE_SCHEMA_VERSION",
+    "CHANGE_VERIFICATION_SCHEMA_VERSION",
     "EVIDENCE_SCHEMA_VERSION",
+    "MAX_CHANGE_EVENTS",
+    "MAX_CHANGE_PREDICATES",
     "MAX_PREDICATES",
     "VERIFICATION_SCHEMA_VERSION",
     "AbstentionReason",
@@ -72,6 +116,19 @@ __all__ = [
     "BaselineResult",
     "CanonicalSerializationError",
     "CaseId",
+    "ChangeCooccurrencePredicate",
+    "ChangeEvent",
+    "ChangeEventEvidence",
+    "ChangeEventKey",
+    "ChangeEventLedger",
+    "ChangeEventLog",
+    "ChangeHypothesisDocument",
+    "ChangeHypothesisVerificationResult",
+    "ChangeKind",
+    "ChangePhase",
+    "ChangePhaseConstraint",
+    "ChangePredicateVerificationResult",
+    "ChangeUnknownReason",
     "DomainError",
     "DomainValidationError",
     "DuplicateSignalError",
@@ -84,6 +141,9 @@ __all__ = [
     "IncidentId",
     "IncidentWindow",
     "InvalidBaselineConfigurationError",
+    "InvalidChangeEventError",
+    "InvalidChangeEventLedgerError",
+    "InvalidChangeHypothesisError",
     "InvalidEvidenceLedgerError",
     "InvalidHypothesisError",
     "InvalidIdentifierError",
@@ -109,11 +169,17 @@ __all__ = [
     "UnknownReason",
     "VerificationReason",
     "VerificationVerdict",
+    "change_ledger_json",
+    "change_verification_json",
+    "compile_change_event_ledger",
     "compile_metric_shift_ledger",
     "ledger_json",
     "rank_metric_shifts",
+    "validate_change_event_ledger",
+    "validate_change_hypothesis_document",
     "validate_hypothesis_document",
     "validate_metric_evidence_ledger",
     "verification_json",
+    "verify_change_hypothesis",
     "verify_hypothesis",
 ]
