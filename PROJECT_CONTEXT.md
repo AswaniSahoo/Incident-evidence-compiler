@@ -4,7 +4,7 @@ Last verified: 2026-07-16
 
 ## Current phase
 
-Phase 1 — domain contracts and deterministic baseline.
+Phase 1 — domain contracts and deterministic baseline — complete. Phase 2 decision subphase is next.
 
 ## Current objective
 
@@ -34,19 +34,21 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Local branch `phase/01-domain-baseline` starts from accepted Phase 0 commit `02584ce`. No remote is configured and no push will occur until Aswani decides after Phase 3 or later. No application code or raw benchmark data has been added yet.
+The local Phase 1 implementation includes dependency-free domain contracts, the exact robust metric-shift baseline, the pinned RCAEval manifest, bounded local adapter, evaluation-only sidecar, random UUIDv4 case IDs, synthetic fixtures, locked tooling, and phase-aware CI. No raw benchmark data has been downloaded. No remote is configured.
 
 ## Validation
 
-Phase 1 must first make project governance phase-aware, then pass this clean-checkout gate:
+Phase 1 must pass this locked clean-checkout gate:
 
 - `uv sync --locked`
-- `uv run python -m unittest discover -s tests -p "test_*.py" -v`
-- `uv run ruff check .`
-- `uv run ruff format --check .`
-- `uv run mypy src tests`
-- `uv run python scripts/validate_project.py`
+- `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
+- `uv run --locked python -m unittest discover -s tests -p "test_*.py" -v`
+- `uv run --locked ruff check .`
+- `uv run --locked ruff format --check .`
+- `uv run --locked mypy src tests`
+- `uv run --locked python scripts/validate_project.py`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
+- `git diff --check`
 - Independent review recorded in the Phase 1 devlog
 
 ## Open decisions
@@ -57,4 +59,4 @@ Phase 1 must first make project governance phase-aware, then pass this clean-che
 
 ## Next action
 
-Commit the Phase 1 decision pack, then implement pure domain value objects and the deterministic baseline with synthetic tests. Do not download RCAEval data and do not push.
+Begin the Phase 2 decision subphase from the accepted product flow: choose the smallest coherent boundary between temporal evidence-ledger contracts and deterministic tri-state predicate verification, freeze acceptance criteria, and create a local Phase 2 branch. Do not download RCAEval data, configure a remote, or push.
