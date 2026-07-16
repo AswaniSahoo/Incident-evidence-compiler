@@ -4,11 +4,11 @@ Last verified: 2026-07-16
 
 ## Current phase
 
-Phase 1 — domain contracts and deterministic baseline — complete. Phase 2 decision subphase is next.
+Phase 2 — immutable metric evidence and deterministic verification.
 
 ## Current objective
 
-Implement a framework-independent incident domain, a deterministic metric-shift baseline with explicit abstention, and a bounded label-safe RCAEval RE2 adapter using synthetic fixtures.
+Compile Phase 1 metric evaluations into a tenant/incident/run-bound immutable evidence ledger, verify a restricted descriptive hypothesis with exact `SUPPORTED`, `REFUTED`, or `UNKNOWN` semantics, and serialize both artifacts canonically without adding infrastructure or model dependencies.
 
 ## Product
 
@@ -20,8 +20,11 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 - RCAEval release `1.2.0` is pinned at commit `bc49dbd85bd14032101fb9a69a5a37e9d6d55178`.
 - RE2-OB is development/calibration, RE2-TT is sealed by default, and RE2-SS is reserved.
 - Raw RCAEval data is not committed or redistributed; the pinned upstream RCAEval repository states MIT for the authors' code/datasets while Zenodo archive metadata states `cc-by-4.0`, and both notices are documented.
-- Phase 1 runtime code uses only the Python 3.12 standard library; Ruff `0.15.13` and mypy `2.1.0` are pinned development tools.
-- The baseline emits ranked suspicion or abstention, never a causal or tri-state verification claim.
+- Runtime code remains Python 3.12 standard-library-only; Ruff `0.15.13`, mypy `2.1.0`, and uv `0.11.17` remain exactly pinned development/build tools.
+- The Phase 1 baseline emits ranked suspicion or abstention, never a causal claim.
+- Phase 2 binds every metric evaluation to immutable provenance, uses content-bound evidence IDs, and verifies only flat descriptive increase/decrease predicates.
+- The verifier uses the frozen baseline minimum score inclusively; global ranking margin remains diagnostic and does not establish or suppress a signal-specific descriptive observation.
+- Context mismatch and causal semantics fail closed as `UNKNOWN`; invalid contracts raise stable leakage-safe domain errors.
 - PostgreSQL will be the durable source of truth and initial job queue in a later phase.
 - Redis is initially limited to disposable cross-process admission control in a later phase.
 - Model-generated SQL, shell commands, remediation, generic chat, LangGraph, MCP, and multi-agent runtime behavior are out of v1 scope.
@@ -34,11 +37,11 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-The local Phase 1 implementation includes dependency-free domain contracts, the exact robust metric-shift baseline, the pinned RCAEval manifest, bounded local adapter, evaluation-only sidecar, random UUIDv4 case IDs, synthetic fixtures, locked tooling, and phase-aware CI. No raw benchmark data has been downloaded. No remote is configured.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 work is isolated on `phase/02-evidence-contracts`. The decision contract is recorded in ADR 0005. No raw benchmark data has been downloaded and no remote is configured.
 
 ## Validation
 
-Phase 1 must pass this locked clean-checkout gate:
+Phase 2 uses the same locked clean-checkout gate as Phase 1:
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -49,14 +52,15 @@ Phase 1 must pass this locked clean-checkout gate:
 - `uv run --locked python scripts/validate_project.py`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 - `git diff --check`
-- Independent review recorded in the Phase 1 devlog
+- One independent Phase 2 implementation review
 
 ## Open decisions
 
 - Public license for this independently written repository.
 - Whether and when Aswani wants to download the 1.19 GB RE2-OB archive for real-data integration.
 - Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
+- Which bounded telemetry type extends the metric-only evidence ledger after Phase 2.
 
 ## Next action
 
-Begin the Phase 2 decision subphase from the accepted product flow: choose the smallest coherent boundary between temporal evidence-ledger contracts and deterministic tri-state predicate verification, freeze acceptance criteria, and create a local Phase 2 branch. Do not download RCAEval data, configure a remote, or push.
+Implement ADR 0005 in parallel evidence, verifier, and governance workstreams; integrate, run the locked gate, obtain one independent review, fix concrete blockers once, and create scoped local commits. Do not download datasets, configure a remote, or push.
