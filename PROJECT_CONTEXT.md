@@ -41,7 +41,7 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. Phase 3 change-event decision, ledger/contracts, verifier, serialization, and validation-evidence commits land on branch `phase/03-change-events`, which is fast-forwarded into `main` as the accepted Phase 3 boundary. The repository is published under Apache-2.0 to the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`). No raw benchmark data has been downloaded; only synthetic fixtures are committed.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. Phase 3 change-event decision, ledger/contracts, verifier, serialization, validation-evidence, sprint-plan, and license commits landed on `main` at commit `a17aa7b`, published to the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`), with `main` tracking `origin/main`. Local AI-assistant working notes (`CLAUDE.md`) are excluded from version control via `.gitignore` and were removed from local history prior to the first push; no such traces exist in the published repository. No raw benchmark data has been downloaded; only synthetic fixtures are committed.
 
 ## Validation
 
@@ -66,4 +66,4 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 3 is committed and `main` is published under Apache-2.0. Next: (1) split the oversized `evidence.py` into focused modules as a behavior-preserving refactor commit; (2) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (3) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+Phase 3 is committed and `main` is published under Apache-2.0 at `origin/main` (commit `a17aa7b`). Next: (1) split the oversized `evidence.py` into focused modules as a behavior-preserving refactor commit; (2) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (3) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
