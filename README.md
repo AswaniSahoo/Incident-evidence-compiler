@@ -4,9 +4,11 @@ A clean-room, production-oriented learning project for evidence-grounded inciden
 
 ## Status
 
-**Phase 0 — foundation and decision records.** No production implementation exists yet.
+**Phase 1 — domain contracts, deterministic baseline, and bounded RCAEval adapter.**
 
-The system will ingest bounded microservice incident telemetry, build a temporal evidence ledger, allow Gemini to propose restricted diagnostic hypotheses, and verify those hypotheses with deterministic predicates before producing a report.
+The repository now contains a standard-library-only Python domain, a replayable robust
+metric-shift baseline with typed abstention, and a label-safe adapter for locally extracted
+RCAEval RE2 data. Only synthetic benchmark fixtures are committed.
 
 ## Why this project exists
 
@@ -36,7 +38,13 @@ No public license has been selected for this new repository yet. Do not publish 
 ## Current validation
 
 ```bash
-python scripts/validate_project.py
+uv sync --locked
+uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
+uv run --locked ruff check .
+uv run --locked ruff format --check .
+uv run --locked mypy src tests
+uv run --locked python scripts/validate_project.py
+kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json
 ```
 
 ## Project governance

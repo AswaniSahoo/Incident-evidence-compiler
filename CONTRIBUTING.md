@@ -18,11 +18,9 @@
 
 ## Validation
 
-Run the targeted checks for changed behavior and the current phase gate. Phase 0 uses:
-
-```bash
-python scripts/validate_project.py
-```
+Run the targeted checks for changed behavior and the current phase gate. Phase 1 uses the
+locked commands documented in `README.md`; begin with `uv sync --locked`, run unittest,
+Ruff check/format, strict mypy, project validation, and Kiro agent validation.
 
 ## Commits
 
