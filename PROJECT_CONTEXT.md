@@ -66,4 +66,4 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 3 is committed and `main` is published under Apache-2.0 at `origin/main` (commit `a17aa7b`). Next: (1) split the oversized `evidence.py` into focused modules as a behavior-preserving refactor commit; (2) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (3) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+Phase 3 is published under Apache-2.0 at `origin/main`, and the metric evidence module is now split into a focused `evidence/` package (behavior-preserving; full gate green, public API unchanged). Next: (1) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
