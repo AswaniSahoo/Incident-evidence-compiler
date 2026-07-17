@@ -62,8 +62,7 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 - Confirm and record the guardrailed real-data ADR (0009): download RE2-OB now, derive a small sanitized label-free committed fixture, ground development in real shapes, keep CI hermetic on fixtures/fakes, and keep RE2-TT sealed.
 - Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
-- Order of post-publish slices: the `evidence.py` refactor first, then the durable persistence boundary (Phase 4), per MASTER-PLAN.
 
 ## Next action
 
-Phase 3 is published under Apache-2.0 at `origin/main`, and the metric evidence module is now split into a focused `evidence/` package (behavior-preserving; full gate green, public API unchanged). Next: (1) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+The `evidence.py` refactor is committed and published at `origin/main` (commit `fc5f057`; behavior-preserving, full gate green, public API unchanged). Next: (1) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
