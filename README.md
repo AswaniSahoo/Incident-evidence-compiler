@@ -4,16 +4,28 @@ A clean-room, production-oriented learning project for evidence-grounded inciden
 
 ## Status
 
-**Phase 3 — bounded change-event co-occurrence evidence (complete).**
+**Phases 0–6 complete — an async control plane and worker over a verified evidence pipeline.**
 
-The repository contains a standard-library-only Python domain: a replayable robust metric-shift
-baseline with typed abstention, an immutable content-addressed metric evidence ledger, a
-deterministic metric-shift verifier, a separate bounded change-event ledger with a tri-state
-temporal co-occurrence verifier, canonical leakage-safe serialization, and a label-safe adapter
-for locally extracted RCAEval RE2 data. There is no infrastructure, API, or model dependency yet.
-Only synthetic benchmark fixtures are committed; raw RCAEval data is never committed.
+The repository is built in framework-independent layers:
 
-The active plan is a two-week public sprint to an evaluated v1 — see [`MASTER-PLAN.md`](MASTER-PLAN.md).
+- **Domain** (standard-library only): a replayable robust metric-shift baseline with typed
+  abstention, an immutable content-addressed metric evidence ledger, a deterministic
+  metric-shift verifier, a separate bounded change-event ledger with a tri-state temporal
+  co-occurrence verifier, and canonical leakage-safe serialization.
+- **Persistence** (`psycopg` / PostgreSQL): tenant-scoped repositories with in-memory fakes,
+  forward-only SQL migrations, and a `SELECT … FOR UPDATE SKIP LOCKED` job queue.
+- **LLM provider boundary** (`google-genai`): one async `LLMClient`, a deterministic
+  `FakeLLMClient`, an untrusted restricted-hypothesis parser, and a Gemini adapter.
+- **Application and control plane** (`fastapi` / `uvicorn`): create/status/report use-cases and
+  a worker that compiles telemetry into a verified report, behind a FastAPI service with static
+  bearer-token authentication and tenant scoping on every data route.
+
+CI is hermetic — it runs against in-memory fakes and a deterministic LLM, with no database,
+network, or credentials. Real PostgreSQL and a live Gemini call are opt-in (see below). Only
+synthetic benchmark fixtures are committed; raw RCAEval data is never committed.
+
+Next is real-data evaluation on RCAEval RE2. The active plan is a two-week public sprint to an
+evaluated v1 — see [`MASTER-PLAN.md`](MASTER-PLAN.md).
 
 ## Why this project exists
 
@@ -56,6 +68,15 @@ uv run --locked mypy src tests
 uv run --locked python scripts/validate_project.py
 kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json
 ```
+
+### Optional integration checks (excluded from the hermetic gate)
+
+These require external resources and are skipped automatically when the environment is absent:
+
+- PostgreSQL: `docker compose up -d`, set `DATABASE_URL`, then
+  `uv run --locked python -m unittest tests.test_persistence_postgres`.
+- Live Gemini: set `GEMINI_API_KEY`, then
+  `uv run --locked python -m unittest tests.test_llm_gemini`.
 
 ## Project governance
 
