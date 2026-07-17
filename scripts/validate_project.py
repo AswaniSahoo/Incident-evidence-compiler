@@ -67,7 +67,7 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
     2: (
         "docs/decisions/0005-phase-2-evidence-contracts.md",
         "docs/devlog/0002-phase-2-evidence-contracts.md",
-        "src/incident_evidence_compiler/domain/evidence.py",
+        "src/incident_evidence_compiler/domain/evidence/__init__.py",
         "src/incident_evidence_compiler/domain/hypotheses.py",
         "src/incident_evidence_compiler/domain/serialization.py",
         "src/incident_evidence_compiler/domain/verifier.py",
