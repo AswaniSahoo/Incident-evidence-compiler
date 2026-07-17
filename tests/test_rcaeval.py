@@ -25,6 +25,8 @@ from incident_evidence_compiler.evaluation.rcaeval import (
     random_case_id,
     sidecar_json,
 )
+from incident_evidence_compiler.evaluation.rcaeval.csv_loader import parse_case
+from incident_evidence_compiler.evaluation.rcaeval.discovery import DiscoveredCase
 from incident_evidence_compiler.evaluation.rcaeval.ids import RcaevalSplit, unique_case_id
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -259,14 +261,54 @@ class CsvBoundaryTests(unittest.TestCase):
         cases = {
             LoadErrorCode.UNSUPPORTED_CSV_SCHEMA: "time,x,x\n0,1,2\n",
             LoadErrorCode.ROW_WIDTH_MISMATCH: "time,x\n0,1,2\n",
-            LoadErrorCode.INVALID_NUMBER: "time,x\n0,\n",
-            LoadErrorCode.NON_FINITE_NUMBER: "time,x\n0,nan\n",
+            LoadErrorCode.INVALID_NUMBER: "time,x\n0,abc\n",
             LoadErrorCode.INVALID_TIMESTAMP: "time,x\nnaive,1\n",
             LoadErrorCode.TIMESTAMPS_NOT_ORDERED: "time,x\n2,1\n1,2\n",
         }
         for expected, text in cases.items():
             with self.subTest(expected=expected):
                 self.assertEqual(self.error_for(text, injection="1"), expected)
+
+    def test_missing_and_non_finite_cells_drop_points_not_case(self) -> None:
+        # Column 'a' has an empty (missing) cell at t=1; column 'b' has a
+        # non-finite cell at t=2. Both are dropped for that signal only; the
+        # case still loads and the other columns at those timestamps survive.
+        text = "time,a,b\n0,1,10\n1,,11\n2,3,nan\n3,4,13\n"
+        with case_tree(text, injection="2") as (_, root, _):
+            batch = RcaevalAdapter(case_id_factory=sequence_factory()).load(root, "OB")
+        self.assertEqual(len(batch.cases), 1)
+        signals = {signal.key.value: signal for signal in batch.cases[0].signals}
+        self.assertEqual(tuple(point.value for point in signals["a"].points), (1, 3, 4))
+        self.assertEqual(tuple(point.value for point in signals["b"].points), (10, 11, 13))
+        # The dropped observations leave gaps in each affected signal's timeline;
+        # missing data is never coerced to zero.
+        self.assertEqual([point.observed_at.timestamp() for point in signals["a"].points][1], 2.0)
+        self.assertEqual([point.observed_at.timestamp() for point in signals["b"].points][2], 3.0)
+
+    def test_parse_case_reports_exact_dropped_cell_count(self) -> None:
+        text = "time,a,b\n0,1,10\n1,,11\n2,3,nan\n3,4,13\n"
+        with case_tree(text, injection="2") as (_, _, case):
+            discovered = DiscoveredCase(
+                directory=case,
+                metric_file=case / "data.csv",
+                injection_file=case / "inject_time.txt",
+                source_locator="redacted",
+                root_cause_service="svc",
+                injected_fault_type="fault",
+                repetition="1",
+            )
+            parsed = parse_case(discovered, CaseId(UUIDS[0]), LoaderLimits())
+        self.assertEqual(parsed.dropped_cell_count, 2)
+        self.assertEqual(parsed.row_count, 4)
+        self.assertIn("dropped_cell_count=2", repr(parsed))
+
+    def test_fully_empty_column_yields_empty_signal(self) -> None:
+        text = "time,a,b\n0,1,\n1,2,\n"
+        with case_tree(text, injection="1") as (_, root, _):
+            batch = RcaevalAdapter(case_id_factory=sequence_factory()).load(root, "OB")
+        signals = {signal.key.value: signal for signal in batch.cases[0].signals}
+        self.assertEqual(tuple(point.value for point in signals["a"].points), (1, 2))
+        self.assertEqual(signals["b"].points, ())
 
     def test_file_row_column_and_field_limits_are_exact(self) -> None:
         with case_tree(self.VALID) as (_, root, case):

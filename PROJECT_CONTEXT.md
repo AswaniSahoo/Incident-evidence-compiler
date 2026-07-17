@@ -58,16 +58,17 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 - `git diff --check`
 - One independent Phase 3 implementation review
 
-## Open decisions
+## Accepted (recent)
 
 - RE2-OB is acquired locally under a guardrail (ADR 0009): downloaded and checksum-verified, stored and extracted outside the repository root so the validator's no-raw-data guarantee stays intact, never committed; CI stays hermetic on synthetic fixtures and fakes; RE2-TT stays sealed and RE2-SS reserved.
+- Missing and non-finite metric cells are gaps, not failures (ADR 0010): the loader drops the point for that signal at that timestamp (never zero), keeps the `time` column strict, treats a non-empty non-numeric cell as a hard `INVALID_NUMBER`, and exposes `dropped_cell_count` on `ParsedCase`. Verified against RE2-OB: parse coverage rose from 19/90 to 88/90 cases.
 
 ## Open decisions
 
-- How the loader should handle missing (empty) and non-finite metric cells present in real RE2-OB CSVs — reject the case, drop the point, or represent an explicit gap — a domain decision affecting evidence semantics (missing data is not zero), to be resolved in its own slice with tests before any real evaluation. Verified against RE2-OB: only 19 of 90 cases parse under the current strict parser.
+- Whether to tolerate a trailing row with an empty `time` cell: 2 of 90 RE2-OB cases (`checkoutservice_cpu/2`, `checkoutservice_mem/2`) still fail `invalid_timestamp` on a truncated final row. Distinct from missing metric cells; deferred.
 - Derive a small sanitized, label-free committed fixture from real RE2-OB shapes (deferred to its own reviewable slice; ADR 0009 commits no derived data).
 - Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
 
 ## Next action
 
-ADR 0009 is recorded and RE2-OB is acquired and checksum-verified outside the repo; a real-data smoke check surfaced that the committed Phase 1 loader rejects 71 of 90 real cases on empty/non-finite metric cells. Next: (1) resolve the missing/non-finite metric-cell handling decision and update the loader with tests; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+ADR 0010 resolves the missing/non-finite metric-cell decision: the loader now drops such cells as gaps and exposes `dropped_cell_count`, lifting real RE2-OB parse coverage from 19/90 to 88/90 (2 residual failures are a trailing empty-timestamp artifact, deferred). Next: begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
