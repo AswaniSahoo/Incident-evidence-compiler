@@ -43,3 +43,17 @@ class TooManyPredicatesError(LLMValidationError):
 
 class ProposalTooLargeError(LLMValidationError):
     code = "proposal_too_large"
+
+
+# Operational provider failures (not input-validation): these are LLMError but not
+# LLMValidationError, since they describe a provider outcome rather than bad model output.
+class ProviderTimeoutError(LLMError):
+    code = "provider_timeout"
+
+
+class ProviderUnavailableError(LLMError):
+    code = "provider_unavailable"
+
+
+class ProviderResponseError(LLMError):
+    code = "provider_response_invalid"

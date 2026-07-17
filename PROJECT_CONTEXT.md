@@ -4,11 +4,11 @@ Last verified: 2026-07-17
 
 ## Current phase
 
-Phase 4 — the durable persistence boundary — is in progress on branch `phase/04-persistence` (not yet merged to `main`). Phases 0–3 are accepted and published under Apache-2.0; interphase real-data grounding (ADR 0009, ADR 0010) and the `evidence/` refactor are complete.
+Phase 5 — the async LLM provider boundary — is in progress on branch `phase/05-llm-provider` (not yet merged to `main`). Phase 4 (durable persistence boundary, ADR 0011) is committed on `phase/04-persistence` and verified against live PostgreSQL 16. Phases 0–3 are accepted and published under Apache-2.0.
 
 ## Current objective
 
-Design and implement the durable persistence boundary (Phase 4): a minimal schema (investigations, jobs, attempts, evidence, reports, audit), typed repository protocols with in-memory fakes, an async `psycopg` driver, migrations, and `SELECT … FOR UPDATE SKIP LOCKED` job claiming with a two-worker race test — keeping domain code framework-independent and CI hermetic against fakes (no live database in the test gate).
+Design and implement the async LLM provider boundary (Phase 5): one asynchronous `LLMClient` protocol, a deterministic `FakeLLMClient` for hermetic tests, an untrusted restricted-hypothesis JSON parser that reuses the domain validators and rejects unknown predicate types and unauthorized entities, and a `GeminiLLMClient` (via `google-genai`) with a per-attempt deadline, retry-once, token capture, and typed malformed-output failure — keeping domain code framework-independent and CI hermetic against the fake (no credentials or network in the test gate).
 
 ## Product
 
@@ -71,4 +71,4 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 4 (durable persistence boundary, ADR 0011) is implemented and independently reviewed on branch `phase/04-persistence`, not yet merged: typed records/errors, repository + unit-of-work protocols, in-memory fakes, the async `psycopg[binary]==3.3.4` driver (first runtime dependency), forward-only SQL migrations + runner, `docker-compose.yml`, and a two-worker `SELECT … FOR UPDATE SKIP LOCKED` race test. The project validator is phase-aware for Phase 4; Phases 1–3 still enforce an empty runtime dependency set. Hermetic locked gate is green (ruff/format/mypy 51 files clean, 212 tests OK with 8 PostgreSQL integration tests skipped, validate full pass, `uv sync --locked` ok). The psycopg/SQL path is now verified against a live PostgreSQL 16 (`docker compose up` + `DATABASE_URL`): all 8 integration tests pass, including the two-worker `SELECT … FOR UPDATE SKIP LOCKED` race. Remaining before merge: commit the branch (approval-gated; nothing committed yet). Then Phase 5 (async `LLMClient` provider boundary) per MASTER-PLAN.
+Phase 5 (async LLM provider boundary) is in progress on branch `phase/05-llm-provider`. Phase 5a is committed (async `LLMClient` protocol, deterministic `FakeLLMClient`, and the untrusted restricted-hypothesis parser). Phase 5b adds `google-genai==2.12.1` (second runtime dependency) and a `GeminiLLMClient` with a per-attempt deadline, retry-once, token capture, and typed malformed-output failure; the validator is phase-aware for Phase 5 and Phases 1–3 still require an empty runtime dependency set. Hermetic gate is green (ruff/format/mypy clean, LLM tests green, one Gemini live-smoke test skipped without `GEMINI_API_KEY`, validate full pass). The Gemini path is exercised hermetically via an injected stub; a live call is verified only when `GEMINI_API_KEY` is set. Remaining: independent review, then Phase 6 (control plane + worker) per MASTER-PLAN.
