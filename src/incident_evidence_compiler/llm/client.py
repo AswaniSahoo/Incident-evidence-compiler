@@ -11,7 +11,7 @@ passed through ``parse_metric_hypothesis``.
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..domain.identifiers import RunId, TenantId
+from ..domain.identifiers import IncidentId, RunId, TenantId
 from ..domain.metrics import SignalKey
 
 
@@ -20,6 +20,7 @@ class HypothesisRequest:
     """A bounded, tenant-scoped request for metric-shift hypotheses."""
 
     tenant: TenantId
+    incident: IncidentId
     run: RunId
     allowed_signals: frozenset[SignalKey]
 

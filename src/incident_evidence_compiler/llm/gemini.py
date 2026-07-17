@@ -41,6 +41,7 @@ def _build_prompt(request: HypothesisRequest) -> str:
     return (
         "Propose restricted metric-shift hypotheses for an incident investigation.\n"
         f"Tenant: {request.tenant.value}\n"
+        f"Incident: {request.incident.value}\n"
         f"Run: {request.run.value}\n"
         f"You may reference only these signal keys: {signals}\n"
         "Return a single JSON object with fields hypothesis_id, tenant_id, incident_id, "

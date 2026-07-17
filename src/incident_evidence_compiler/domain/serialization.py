@@ -464,6 +464,20 @@ def verification_json(result: HypothesisVerificationResult) -> str:
         raise CanonicalSerializationError from None
 
 
+def metric_evidence_entry_json(entry: MetricShiftEvidence) -> str:
+    """Serialize one validated metric-shift evidence entry canonically.
+
+    Additive to the ledger serializer: lets a single content-addressed evidence entry be
+    persisted and replayed independently, keyed by its own ``evidence_id``.
+    """
+    try:
+        return _canonical_json(_entry_payload(entry))
+    except CanonicalSerializationError:
+        raise
+    except Exception:
+        raise CanonicalSerializationError from None
+
+
 def _change_event_key(value: object) -> str:
     key = _exact(value, ChangeEventKey)
     return _text(key.value)

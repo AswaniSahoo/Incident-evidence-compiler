@@ -8,6 +8,7 @@ or model SDK. It structurally satisfies the ``LLMClient`` protocol.
 from collections.abc import Sequence
 
 from .client import HypothesisRequest, LLMProposal
+from .errors import ProposalsExhaustedError
 
 
 class FakeLLMClient:
@@ -19,7 +20,7 @@ class FakeLLMClient:
 
     async def propose_metric_hypotheses(self, request: HypothesisRequest) -> LLMProposal:
         if self._index >= len(self._responses):
-            raise IndexError
+            raise ProposalsExhaustedError
         raw = self._responses[self._index]
         self._index += 1
         return LLMProposal(raw_json=raw)
