@@ -164,7 +164,7 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(6)
+        self.write_context(7)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
@@ -405,6 +405,59 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertIn("docs/decisions/0012-llm-provider-boundary.md", required)
         self.assertIn("src/incident_evidence_compiler/llm/gemini.py", required)
         self.assertIn("tests/test_llm_gemini.py", required)
+
+    def test_phase6_allows_web_stack_dependencies(self) -> None:
+        self.write_tooling(
+            dependencies=(
+                '["fastapi==0.139.2", "google-genai==2.12.1", '
+                '"psycopg[binary]==3.3.4", "uvicorn[standard]==0.51.0"]'
+            ),
+            extra_lock_packages=(
+                ("psycopg", "3.3.4"),
+                ("google-genai", "2.12.1"),
+                ("fastapi", "0.139.2"),
+                ("uvicorn", "0.51.0"),
+            ),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(6, errors)
+        self.assertEqual(errors, [])
+
+    def test_phase6_requires_web_stack_lock_pins(self) -> None:
+        self.write_tooling(
+            dependencies=(
+                '["fastapi==0.139.2", "google-genai==2.12.1", '
+                '"psycopg[binary]==3.3.4", "uvicorn[standard]==0.51.0"]'
+            ),
+            extra_lock_packages=(("psycopg", "3.3.4"), ("google-genai", "2.12.1")),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(6, errors)
+        self.assertTrue(any("fastapi==0.139.2" in error for error in errors))
+        self.assertTrue(any("uvicorn==0.51.0" in error for error in errors))
+
+    def test_phase5_still_forbids_web_stack(self) -> None:
+        self.write_tooling(
+            dependencies=(
+                '["fastapi==0.139.2", "google-genai==2.12.1", '
+                '"psycopg[binary]==3.3.4", "uvicorn[standard]==0.51.0"]'
+            ),
+            extra_lock_packages=(
+                ("psycopg", "3.3.4"),
+                ("google-genai", "2.12.1"),
+                ("fastapi", "0.139.2"),
+                ("uvicorn", "0.51.0"),
+            ),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(5, errors)
+        self.assertTrue(any("runtime dependencies" in error for error in errors))
+
+    def test_phase6_required_files_include_api(self) -> None:
+        required = validator.PHASE_REQUIRED_FILES[6]
+        self.assertIn("docs/decisions/0013-control-plane-worker.md", required)
+        self.assertIn("src/incident_evidence_compiler/api/app.py", required)
+        self.assertIn("tests/test_api.py", required)
 
     def test_rejects_raw_archives_and_extracted_trees(self) -> None:
         (validator.ROOT / "RE2-OB.zip").write_text("not data\n", encoding="utf-8")

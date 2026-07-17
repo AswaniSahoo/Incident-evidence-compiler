@@ -112,6 +112,21 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_llm.py",
         "tests/test_llm_gemini.py",
     ),
+    6: (
+        "docs/decisions/0013-control-plane-worker.md",
+        "docs/devlog/0007-phase-6-control-plane.md",
+        "src/incident_evidence_compiler/application/__init__.py",
+        "src/incident_evidence_compiler/application/errors.py",
+        "src/incident_evidence_compiler/application/contracts.py",
+        "src/incident_evidence_compiler/application/telemetry.py",
+        "src/incident_evidence_compiler/application/use_cases.py",
+        "src/incident_evidence_compiler/application/worker.py",
+        "src/incident_evidence_compiler/api/__init__.py",
+        "src/incident_evidence_compiler/api/app.py",
+        "src/incident_evidence_compiler/api/auth.py",
+        "tests/test_application.py",
+        "tests/test_api.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -164,6 +179,7 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     3: PHASE1_CI_RUNS,
     4: PHASE1_CI_RUNS,
     5: PHASE1_CI_RUNS,
+    6: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -181,6 +197,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     3: PHASE1_REQUIRED_ACTIONS,
     4: PHASE1_REQUIRED_ACTIONS,
     5: PHASE1_REQUIRED_ACTIONS,
+    6: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -204,10 +221,12 @@ PHASE4_SCOPE_EXCEPTIONS = {"docker-compose.yml"}
 APPROVED_RUNTIME_DEPENDENCIES: dict[int, tuple[str, ...]] = {
     4: ("psycopg[binary]==3.3.4",),
     5: ("google-genai==2.12.1",),
+    6: ("fastapi==0.139.2", "uvicorn[standard]==0.51.0"),
 }
 APPROVED_LOCK_PACKAGES: dict[int, tuple[tuple[str, str], ...]] = {
     4: (("psycopg", "3.3.4"),),
     5: (("google-genai", "2.12.1"),),
+    6: (("fastapi", "0.139.2"), ("uvicorn", "0.51.0")),
 }
 LICENSE_ARTIFACTS = {"LICENSE", "COPYING", "NOTICE"}
 TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
