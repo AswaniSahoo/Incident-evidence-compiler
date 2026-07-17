@@ -31,11 +31,13 @@ class ParsedCase:
     signals: tuple[MetricSignal, ...]
     row_count: int
     column_count: int
+    dropped_cell_count: int
 
     def __repr__(self) -> str:
         return (
             f"ParsedCase(signal_count={len(self.signals)}, "
-            f"row_count={self.row_count}, column_count={self.column_count})"
+            f"row_count={self.row_count}, column_count={self.column_count}, "
+            f"dropped_cell_count={self.dropped_cell_count})"
         )
 
 
@@ -82,15 +84,25 @@ def parse_timestamp(raw: str, case_id: CaseId) -> datetime:
         raise RcaevalLoadError(LoadErrorCode.INVALID_TIMESTAMP, case_id) from None
 
 
-def _number(raw: str, case_id: CaseId) -> float:
+def _finite_value_or_gap(raw: str, case_id: CaseId) -> float | None:
+    """Classify a single metric cell.
+
+    Returns a finite float for a usable observation, or ``None`` for a gap.
+    An empty cell (a missing observation) and a value that parses as non-finite
+    (``nan``/``inf``/overflow) are both treated as gaps: the point is dropped for
+    that signal at that timestamp rather than coerced to zero, because missing
+    data is not zero (ADR 0010). A non-empty cell that does not parse as a number
+    remains a hard ``INVALID_NUMBER`` error, since it indicates a schema or format
+    problem rather than a missing observation.
+    """
     if not raw:
-        raise RcaevalLoadError(LoadErrorCode.INVALID_NUMBER, case_id) from None
+        return None
     try:
         value = float(raw)
     except (OverflowError, ValueError):
         raise RcaevalLoadError(LoadErrorCode.INVALID_NUMBER, case_id) from None
     if not math.isfinite(value):
-        raise RcaevalLoadError(LoadErrorCode.NON_FINITE_NUMBER, case_id) from None
+        return None
     return value
 
 
@@ -122,7 +134,7 @@ def _parse_metric_csv(
     text: str,
     limits: LoaderLimits,
     case_id: CaseId,
-) -> tuple[list[str], list[datetime], list[list[MetricPoint]], int]:
+) -> tuple[list[str], list[datetime], list[list[MetricPoint]], int, int]:
     _validate_logical_record_width(text, limits, case_id)
     with _CSV_LOCK:
         previous = csv.field_size_limit()
@@ -146,6 +158,7 @@ def _parse_metric_csv(
             timestamps: list[datetime] = []
             columns: list[list[MetricPoint]] = [[] for _ in header[1:]]
             row_count = 0
+            dropped_cell_count = 0
             for row in reader:
                 if len(row) > limits.max_columns:
                     raise RcaevalLoadError(LoadErrorCode.COLUMN_LIMIT_EXCEEDED, case_id)
@@ -159,10 +172,14 @@ def _parse_metric_csv(
                     raise RcaevalLoadError(LoadErrorCode.TIMESTAMPS_NOT_ORDERED, case_id)
                 timestamps.append(observed_at)
                 for column_index, raw in enumerate(row[1:]):
-                    columns[column_index].append(MetricPoint(observed_at, _number(raw, case_id)))
+                    value = _finite_value_or_gap(raw, case_id)
+                    if value is None:
+                        dropped_cell_count += 1
+                        continue
+                    columns[column_index].append(MetricPoint(observed_at, value))
             if row_count == 0:
                 raise RcaevalLoadError(LoadErrorCode.UNSUPPORTED_CSV_SCHEMA, case_id)
-            return header, timestamps, columns, row_count
+            return header, timestamps, columns, row_count, dropped_cell_count
         except RcaevalLoadError:
             raise
         except csv.Error as exc:
@@ -187,7 +204,9 @@ def parse_case(
         LoadErrorCode.METRIC_FILE_TOO_LARGE,
         case_id,
     )
-    header, timestamps, columns, row_count = _parse_metric_csv(text, limits, case_id)
+    header, timestamps, columns, row_count, dropped_cell_count = _parse_metric_csv(
+        text, limits, case_id
+    )
     injection_text = _bounded_text(
         discovered.injection_file,
         limits.max_inject_time_file_bytes,
@@ -204,4 +223,4 @@ def parse_case(
         )
     except (OverflowError, ValueError):
         raise RcaevalLoadError(LoadErrorCode.INVALID_TIMESTAMP, case_id) from None
-    return ParsedCase(window, signals, row_count, len(header))
+    return ParsedCase(window, signals, row_count, len(header), dropped_cell_count)
