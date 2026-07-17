@@ -88,6 +88,7 @@ from .serialization import (
     change_ledger_json,
     change_verification_json,
     ledger_json,
+    metric_evidence_entry_json,
     verification_json,
 )
 from .verifier import (
@@ -174,6 +175,7 @@ __all__ = [
     "compile_change_event_ledger",
     "compile_metric_shift_ledger",
     "ledger_json",
+    "metric_evidence_entry_json",
     "rank_metric_shifts",
     "validate_change_event_ledger",
     "validate_change_hypothesis_document",

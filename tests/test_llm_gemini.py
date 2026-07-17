@@ -11,7 +11,7 @@ import os
 import unittest
 from datetime import timedelta
 
-from incident_evidence_compiler.domain.identifiers import RunId, TenantId
+from incident_evidence_compiler.domain.identifiers import IncidentId, RunId, TenantId
 from incident_evidence_compiler.domain.metrics import SignalKey
 from incident_evidence_compiler.llm import (
     GeminiLLMClient,
@@ -28,6 +28,7 @@ _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 def _request() -> HypothesisRequest:
     return HypothesisRequest(
         tenant=TenantId("tenant-a"),
+        incident=IncidentId("inc-1"),
         run=RunId("run-1"),
         allowed_signals=frozenset({SignalKey("checkoutservice_cpu")}),
     )
