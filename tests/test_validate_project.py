@@ -164,7 +164,7 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(5)
+        self.write_context(6)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
@@ -367,6 +367,44 @@ class PhasePolicyTests(unittest.TestCase):
     def test_phase4_reuses_phase1_ci_and_actions(self) -> None:
         self.assertEqual(validator.EXPECTED_CI_RUNS_BY_PHASE[4], validator.PHASE1_CI_RUNS)
         self.assertEqual(validator.REQUIRED_ACTIONS_BY_PHASE[4], validator.PHASE1_REQUIRED_ACTIONS)
+
+    def test_phase5_allows_psycopg_and_google_genai_any_order(self) -> None:
+        for dependencies in (
+            '["google-genai==2.12.1", "psycopg[binary]==3.3.4"]',
+            '["psycopg[binary]==3.3.4", "google-genai==2.12.1"]',
+        ):
+            with self.subTest(dependencies=dependencies):
+                self.write_tooling(
+                    dependencies=dependencies,
+                    extra_lock_packages=(("psycopg", "3.3.4"), ("google-genai", "2.12.1")),
+                )
+                errors: list[str] = []
+                validator._validate_phase1_tooling(5, errors)
+                self.assertEqual(errors, [])
+
+    def test_phase5_requires_google_genai_lock_pin(self) -> None:
+        self.write_tooling(
+            dependencies='["google-genai==2.12.1", "psycopg[binary]==3.3.4"]',
+            extra_lock_packages=(("psycopg", "3.3.4"),),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(5, errors)
+        self.assertTrue(any("google-genai==2.12.1" in error for error in errors))
+
+    def test_phase4_still_forbids_google_genai(self) -> None:
+        self.write_tooling(
+            dependencies='["google-genai==2.12.1", "psycopg[binary]==3.3.4"]',
+            extra_lock_packages=(("psycopg", "3.3.4"), ("google-genai", "2.12.1")),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(4, errors)
+        self.assertTrue(any("runtime dependencies" in error for error in errors))
+
+    def test_phase5_required_files_include_llm_and_gemini(self) -> None:
+        required = validator.PHASE_REQUIRED_FILES[5]
+        self.assertIn("docs/decisions/0012-llm-provider-boundary.md", required)
+        self.assertIn("src/incident_evidence_compiler/llm/gemini.py", required)
+        self.assertIn("tests/test_llm_gemini.py", required)
 
     def test_rejects_raw_archives_and_extracted_trees(self) -> None:
         (validator.ROOT / "RE2-OB.zip").write_text("not data\n", encoding="utf-8")

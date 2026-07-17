@@ -100,6 +100,18 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_persistence.py",
         "tests/test_persistence_postgres.py",
     ),
+    5: (
+        "docs/decisions/0012-llm-provider-boundary.md",
+        "docs/devlog/0006-phase-5-llm-provider.md",
+        "src/incident_evidence_compiler/llm/__init__.py",
+        "src/incident_evidence_compiler/llm/errors.py",
+        "src/incident_evidence_compiler/llm/client.py",
+        "src/incident_evidence_compiler/llm/parsing.py",
+        "src/incident_evidence_compiler/llm/fake.py",
+        "src/incident_evidence_compiler/llm/gemini.py",
+        "tests/test_llm.py",
+        "tests/test_llm_gemini.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -151,6 +163,7 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     2: PHASE1_CI_RUNS,
     3: PHASE1_CI_RUNS,
     4: PHASE1_CI_RUNS,
+    5: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -167,6 +180,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     2: PHASE1_REQUIRED_ACTIONS,
     3: PHASE1_REQUIRED_ACTIONS,
     4: PHASE1_REQUIRED_ACTIONS,
+    5: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -189,9 +203,11 @@ PHASE4_SCOPE_EXCEPTIONS = {"docker-compose.yml"}
 # Approved runtime dependencies and their resolved lock pins, introduced per phase.
 APPROVED_RUNTIME_DEPENDENCIES: dict[int, tuple[str, ...]] = {
     4: ("psycopg[binary]==3.3.4",),
+    5: ("google-genai==2.12.1",),
 }
 APPROVED_LOCK_PACKAGES: dict[int, tuple[tuple[str, str], ...]] = {
     4: (("psycopg", "3.3.4"),),
+    5: (("google-genai", "2.12.1"),),
 }
 LICENSE_ARTIFACTS = {"LICENSE", "COPYING", "NOTICE"}
 TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
@@ -407,7 +423,12 @@ def _validate_phase1_tooling(phase: int, errors: list[str]) -> None:
         project = {}
     if project.get("requires-python") != ">=3.12,<3.13":
         errors.append("pyproject requires-python must equal >=3.12,<3.13")
-    if project.get("dependencies") != _expected_runtime_dependencies(phase):
+    dependencies = project.get("dependencies")
+    if (
+        not isinstance(dependencies, list)
+        or not all(isinstance(item, str) for item in dependencies)
+        or sorted(dependencies) != sorted(_expected_runtime_dependencies(phase))
+    ):
         errors.append("runtime dependencies must match the approved set for the current phase")
     if "optional-dependencies" in project:
         errors.append("project must not declare optional runtime dependencies")
