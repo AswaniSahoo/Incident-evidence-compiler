@@ -40,6 +40,10 @@ artifacts/
 eval/results/
 logs/
 
+# Raw RCAEval RE2 archives and extracted trees (separately licensed; never committed)
+data/RE2/
+*.zip
+
 # Local compose overrides
 *.override.yml
 
