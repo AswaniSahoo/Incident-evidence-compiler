@@ -60,9 +60,14 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Open decisions
 
-- Confirm and record the guardrailed real-data ADR (0009): download RE2-OB now, derive a small sanitized label-free committed fixture, ground development in real shapes, keep CI hermetic on fixtures/fakes, and keep RE2-TT sealed.
+- RE2-OB is acquired locally under a guardrail (ADR 0009): downloaded and checksum-verified, stored and extracted outside the repository root so the validator's no-raw-data guarantee stays intact, never committed; CI stays hermetic on synthetic fixtures and fakes; RE2-TT stays sealed and RE2-SS reserved.
+
+## Open decisions
+
+- How the loader should handle missing (empty) and non-finite metric cells present in real RE2-OB CSVs — reject the case, drop the point, or represent an explicit gap — a domain decision affecting evidence semantics (missing data is not zero), to be resolved in its own slice with tests before any real evaluation. Verified against RE2-OB: only 19 of 90 cases parse under the current strict parser.
+- Derive a small sanitized, label-free committed fixture from real RE2-OB shapes (deferred to its own reviewable slice; ADR 0009 commits no derived data).
 - Whether RE2-SS becomes a secondary development set after the OB baseline is measured.
 
 ## Next action
 
-The `evidence.py` refactor is committed and published at `origin/main` (commit `fc5f057`; behavior-preserving, full gate green, public API unchanged). Next: (1) confirm and record the guardrailed real-data ADR (0009) and download RE2-OB; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+ADR 0009 is recorded and RE2-OB is acquired and checksum-verified outside the repo; a real-data smoke check surfaced that the committed Phase 1 loader rejects 71 of 90 real cases on empty/non-finite metric cells. Next: (1) resolve the missing/non-finite metric-cell handling decision and update the loader with tests; (2) begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
