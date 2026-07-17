@@ -85,6 +85,21 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_changes.py",
         "tests/test_change_verifier.py",
     ),
+    4: (
+        "docs/decisions/0011-persistence-boundary.md",
+        "docs/devlog/0005-phase-4-persistence.md",
+        "docker-compose.yml",
+        "src/incident_evidence_compiler/persistence/__init__.py",
+        "src/incident_evidence_compiler/persistence/errors.py",
+        "src/incident_evidence_compiler/persistence/records.py",
+        "src/incident_evidence_compiler/persistence/repositories.py",
+        "src/incident_evidence_compiler/persistence/memory.py",
+        "src/incident_evidence_compiler/persistence/migrations/0001_initial.sql",
+        "src/incident_evidence_compiler/persistence/migrations/runner.py",
+        "src/incident_evidence_compiler/persistence/postgres/unit_of_work.py",
+        "tests/test_persistence.py",
+        "tests/test_persistence_postgres.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -135,6 +150,7 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     1: PHASE1_CI_RUNS,
     2: PHASE1_CI_RUNS,
     3: PHASE1_CI_RUNS,
+    4: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -150,6 +166,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     1: PHASE1_REQUIRED_ACTIONS,
     2: PHASE1_REQUIRED_ACTIONS,
     3: PHASE1_REQUIRED_ACTIONS,
+    4: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -168,6 +185,14 @@ FORBIDDEN_PHASE0_PATHS = (
     "NOTICE",
 )
 PHASE1_SCOPE_EXCEPTIONS = {"src", "pyproject.toml", "uv.lock"}
+PHASE4_SCOPE_EXCEPTIONS = {"docker-compose.yml"}
+# Approved runtime dependencies and their resolved lock pins, introduced per phase.
+APPROVED_RUNTIME_DEPENDENCIES: dict[int, tuple[str, ...]] = {
+    4: ("psycopg[binary]==3.3.4",),
+}
+APPROVED_LOCK_PACKAGES: dict[int, tuple[tuple[str, str], ...]] = {
+    4: (("psycopg", "3.3.4"),),
+}
 LICENSE_ARTIFACTS = {"LICENSE", "COPYING", "NOTICE"}
 TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
 
@@ -310,6 +335,8 @@ def _validate_phase_scope(phase: int, errors: list[str]) -> None:
     forbidden = set(FORBIDDEN_PHASE0_PATHS)
     if phase >= 1:
         forbidden -= PHASE1_SCOPE_EXCEPTIONS
+    if phase >= 4:
+        forbidden -= PHASE4_SCOPE_EXCEPTIONS
     if _license_recorded():
         forbidden -= LICENSE_ARTIFACTS
     for relative in sorted(forbidden):
@@ -355,7 +382,21 @@ def _validate_dataset_policy(errors: list[str]) -> None:
                     )
 
 
-def _validate_phase1_tooling(errors: list[str]) -> None:
+def _expected_runtime_dependencies(phase: int) -> list[str]:
+    result: list[str] = []
+    for number in range(1, phase + 1):
+        result.extend(APPROVED_RUNTIME_DEPENDENCIES.get(number, ()))
+    return result
+
+
+def _expected_lock_packages(phase: int) -> list[tuple[str, str]]:
+    packages: list[tuple[str, str]] = [("mypy", "2.1.0"), ("ruff", "0.15.13")]
+    for number in range(1, phase + 1):
+        packages.extend(APPROVED_LOCK_PACKAGES.get(number, ()))
+    return packages
+
+
+def _validate_phase1_tooling(phase: int, errors: list[str]) -> None:
     project_file = _read_toml("pyproject.toml", errors)
     project = project_file.get("project", {})
     build = project_file.get("build-system", {})
@@ -366,10 +407,10 @@ def _validate_phase1_tooling(errors: list[str]) -> None:
         project = {}
     if project.get("requires-python") != ">=3.12,<3.13":
         errors.append("pyproject requires-python must equal >=3.12,<3.13")
-    if project.get("dependencies") != []:
-        errors.append("Phase 1 application runtime dependencies must be empty")
+    if project.get("dependencies") != _expected_runtime_dependencies(phase):
+        errors.append("runtime dependencies must match the approved set for the current phase")
     if "optional-dependencies" in project:
-        errors.append("Phase 1 must not declare optional runtime dependencies")
+        errors.append("project must not declare optional runtime dependencies")
     if not isinstance(build, dict) or build.get("requires") != ["uv_build==0.11.17"]:
         errors.append("build backend requirement must equal uv_build==0.11.17")
     if not isinstance(build, dict) or build.get("build-backend") != "uv_build":
@@ -398,7 +439,7 @@ def _validate_phase1_tooling(errors: list[str]) -> None:
     if not isinstance(packages, list):
         errors.append("uv.lock packages must be an array")
         return
-    for name, version in (("mypy", "2.1.0"), ("ruff", "0.15.13")):
+    for name, version in _expected_lock_packages(phase):
         matches = [
             package
             for package in packages
@@ -522,7 +563,7 @@ def main() -> int:
         _validate_provenance(errors)
         _validate_dataset_policy(errors)
         if phase >= 1:
-            _validate_phase1_tooling(errors)
+            _validate_phase1_tooling(phase, errors)
         _validate_ci(phase, errors)
 
     if errors:

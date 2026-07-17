@@ -1,0 +1,20 @@
+# Local development PostgreSQL for opt-in integration tests only.
+# NOT a production or deployment artifact; credentials here are throwaway local values.
+# Usage:
+#   docker compose up -d
+#   $env:DATABASE_URL = "postgresql://iec:iec@localhost:5432/iec"
+#   uv run --locked python -m unittest tests.test_persistence_postgres -v
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: iec
+      POSTGRES_PASSWORD: iec
+      POSTGRES_DB: iec
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iec -d iec"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

@@ -164,7 +164,7 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(4)
+        self.write_context(5)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
@@ -277,7 +277,13 @@ class PhasePolicyTests(unittest.TestCase):
         validator._validate_phase_scope(2, errors)
         self.assertTrue(any("eval" in error for error in errors))
 
-    def write_tooling(self, *, dependencies: str = "[]", lock_tools: bool = True) -> None:
+    def write_tooling(
+        self,
+        *,
+        dependencies: str = "[]",
+        lock_tools: bool = True,
+        extra_lock_packages: tuple[tuple[str, str], ...] = (),
+    ) -> None:
         (validator.ROOT / "pyproject.toml").write_text(
             '[build-system]\nrequires = ["uv_build==0.11.17"]\n'
             'build-backend = "uv_build"\n[project]\n'
@@ -295,6 +301,8 @@ class PhasePolicyTests(unittest.TestCase):
             if lock_tools
             else ""
         )
+        for name, version in extra_lock_packages:
+            packages += f'[[package]]\nname = "{name}"\nversion = "{version}"\n'
         (validator.ROOT / "uv.lock").write_text(
             'version = 1\n[[package]]\nname = "incident-evidence-compiler"\n'
             'version = "0.1.0"\nsource = { editable = "." }\n' + packages,
@@ -304,15 +312,61 @@ class PhasePolicyTests(unittest.TestCase):
     def test_accepts_exact_phase1_tooling_contract(self) -> None:
         self.write_tooling()
         errors: list[str] = []
-        validator._validate_phase1_tooling(errors)
+        validator._validate_phase1_tooling(1, errors)
         self.assertEqual(errors, [])
 
     def test_rejects_runtime_dependencies_and_stale_lock(self) -> None:
         self.write_tooling(dependencies='["requests"]', lock_tools=False)
         errors: list[str] = []
-        validator._validate_phase1_tooling(errors)
+        validator._validate_phase1_tooling(1, errors)
         self.assertTrue(any("runtime dependencies" in error for error in errors))
         self.assertTrue(any("mypy==2.1.0" in error for error in errors))
+
+    def test_phase4_allows_approved_psycopg_dependency(self) -> None:
+        self.write_tooling(
+            dependencies='["psycopg[binary]==3.3.4"]',
+            extra_lock_packages=(("psycopg", "3.3.4"),),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(4, errors)
+        self.assertEqual(errors, [])
+
+    def test_phase4_requires_psycopg_lock_pin(self) -> None:
+        self.write_tooling(dependencies='["psycopg[binary]==3.3.4"]')
+        errors: list[str] = []
+        validator._validate_phase1_tooling(4, errors)
+        self.assertTrue(any("psycopg==3.3.4" in error for error in errors))
+
+    def test_phase3_still_forbids_runtime_dependencies(self) -> None:
+        self.write_tooling(
+            dependencies='["psycopg[binary]==3.3.4"]',
+            extra_lock_packages=(("psycopg", "3.3.4"),),
+        )
+        errors: list[str] = []
+        validator._validate_phase1_tooling(3, errors)
+        self.assertTrue(any("runtime dependencies" in error for error in errors))
+
+    def test_phase4_allows_docker_compose_but_phase3_forbids_it(self) -> None:
+        (validator.ROOT / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+        phase4_errors: list[str] = []
+        validator._validate_phase_scope(4, phase4_errors)
+        self.assertEqual(phase4_errors, [])
+        phase3_errors: list[str] = []
+        validator._validate_phase_scope(3, phase3_errors)
+        self.assertTrue(any("docker-compose.yml" in error for error in phase3_errors))
+
+    def test_phase4_required_files_include_persistence_and_compose(self) -> None:
+        required = validator.PHASE_REQUIRED_FILES[4]
+        self.assertIn("docs/decisions/0011-persistence-boundary.md", required)
+        self.assertIn("docker-compose.yml", required)
+        self.assertIn(
+            "src/incident_evidence_compiler/persistence/postgres/unit_of_work.py", required
+        )
+        self.assertIn("tests/test_persistence_postgres.py", required)
+
+    def test_phase4_reuses_phase1_ci_and_actions(self) -> None:
+        self.assertEqual(validator.EXPECTED_CI_RUNS_BY_PHASE[4], validator.PHASE1_CI_RUNS)
+        self.assertEqual(validator.REQUIRED_ACTIONS_BY_PHASE[4], validator.PHASE1_REQUIRED_ACTIONS)
 
     def test_rejects_raw_archives_and_extracted_trees(self) -> None:
         (validator.ROOT / "RE2-OB.zip").write_text("not data\n", encoding="utf-8")
