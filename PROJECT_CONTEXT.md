@@ -4,11 +4,11 @@ Last verified: 2026-07-17
 
 ## Current phase
 
-Phase 3 — bounded change-event co-occurrence evidence — complete.
+Phase 4 — the durable persistence boundary — is in progress on branch `phase/04-persistence` (not yet merged to `main`). Phases 0–3 are accepted and published under Apache-2.0; interphase real-data grounding (ADR 0009, ADR 0010) and the `evidence/` refactor are complete.
 
 ## Current objective
 
-Extend the immutable evidence ledger with bounded change/deployment events, bind them to the same tenant/incident/run context, and verify a restricted temporal co-occurrence hypothesis deterministically as `SUPPORTED`, `REFUTED`, or `UNKNOWN` — as descriptive timing only, never a causal claim — while serializing both artifacts canonically without adding infrastructure or model dependencies.
+Design and implement the durable persistence boundary (Phase 4): a minimal schema (investigations, jobs, attempts, evidence, reports, audit), typed repository protocols with in-memory fakes, an async `psycopg` driver, migrations, and `SELECT … FOR UPDATE SKIP LOCKED` job claiming with a two-worker race test — keeping domain code framework-independent and CI hermetic against fakes (no live database in the test gate).
 
 ## Product
 
@@ -41,7 +41,7 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. Phase 3 change-event decision, ledger/contracts, verifier, serialization, validation-evidence, sprint-plan, and license commits landed on `main` at commit `a17aa7b`, published to the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`), with `main` tracking `origin/main`. Local AI-assistant working notes (`CLAUDE.md`) are excluded from version control via `.gitignore` and were removed from local history prior to the first push; no such traces exist in the published repository. No raw benchmark data has been downloaded; only synthetic fixtures are committed.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. The Phase 3 boundary is `a17aa7b`. Since then, `main` advanced through the evidence-module refactor (`fc5f057`), ADR 0009 (`21bd72e`), and ADR 0010 (`773d39d`), and is published to and tracking the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`) at `773d39d`. Local AI-assistant working notes (`CLAUDE.md`) are excluded via `.gitignore` and were removed from local history prior to the first push; no such traces exist in the published repository. RE2-OB has been downloaded and checksum-verified but is stored and extracted outside the repository root and is never committed; only synthetic fixtures are committed. RE2-TT stays sealed; RE2-SS reserved.
 
 ## Validation
 
@@ -71,4 +71,4 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-ADR 0010 resolves the missing/non-finite metric-cell decision: the loader now drops such cells as gaps and exposes `dropped_cell_count`, lifting real RE2-OB parse coverage from 19/90 to 88/90 (2 residual failures are a trailing empty-timestamp artifact, deferred). Next: begin Phase 4 — the durable persistence boundary — against in-memory fakes per MASTER-PLAN, keeping CI hermetic.
+Phase 4 (durable persistence boundary, ADR 0011) is implemented and independently reviewed on branch `phase/04-persistence`, not yet merged: typed records/errors, repository + unit-of-work protocols, in-memory fakes, the async `psycopg[binary]==3.3.4` driver (first runtime dependency), forward-only SQL migrations + runner, `docker-compose.yml`, and a two-worker `SELECT … FOR UPDATE SKIP LOCKED` race test. The project validator is phase-aware for Phase 4; Phases 1–3 still enforce an empty runtime dependency set. Hermetic locked gate is green (ruff/format/mypy 51 files clean, 212 tests OK with 8 PostgreSQL integration tests skipped, validate full pass, `uv sync --locked` ok). The psycopg/SQL path is now verified against a live PostgreSQL 16 (`docker compose up` + `DATABASE_URL`): all 8 integration tests pass, including the two-worker `SELECT … FOR UPDATE SKIP LOCKED` race. Remaining before merge: commit the branch (approval-gated; nothing committed yet). Then Phase 5 (async `LLMClient` provider boundary) per MASTER-PLAN.
