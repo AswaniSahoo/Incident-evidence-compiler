@@ -51,3 +51,6 @@ data/RE2/
 CLAUDE.md
 .claude/
 .serena/
+
+# Private planning (personal sprint/career notes; local only, never published)
+MASTER-PLAN.md
