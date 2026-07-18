@@ -1,14 +1,22 @@
 # Project Context
 
-Last verified: 2026-07-17
+Last verified: 2026-07-18
 
 ## Current phase
 
-Phase 5 — the async LLM provider boundary — is in progress on branch `phase/05-llm-provider` (not yet merged to `main`). Phase 4 (durable persistence boundary, ADR 0011) is committed on `phase/04-persistence` and verified against live PostgreSQL 16. Phases 0–3 are accepted and published under Apache-2.0.
+Phase 9 — runnable server entrypoint + container image (ADR 0016) — is implemented on branch `phase/07-real-data` with the full locked hermetic gate verified green (2026-07-18); it is pending one independent review and Aswani's explicit commit approval. Phase 8 (observability) precedes it in this working tree. Phase 9 makes the system actually runnable (`python -m incident_evidence_compiler` / `docker run`) and adds a docker-build + smoke gate to CI, with no new runtime dependency.
 
 ## Current objective
 
-Design and implement the async LLM provider boundary (Phase 5): one asynchronous `LLMClient` protocol, a deterministic `FakeLLMClient` for hermetic tests, an untrusted restricted-hypothesis JSON parser that reuses the domain validators and rejects unknown predicate types and unauthorized entities, and a `GeminiLLMClient` (via `google-genai`) with a per-attempt deadline, retry-once, token capture, and typed malformed-output failure — keeping domain code framework-independent and CI hermetic against the fake (no credentials or network in the test gate).
+Ship the last remaining v1 code slice (Phase 9, ADR 0016): a composition-root `runtime` package
+(`AppConfig.from_env`, `build_components`, `create_server_app`, `run_worker_loop`) and a
+`python -m incident_evidence_compiler` entrypoint that wires the persistence, LLM, and telemetry
+ports into a FastAPI control plane plus an in-process worker loop; a labelled non-model smoke LLM
+client and a labelled RCAEval-backed demo telemetry source so the system boots and completes the
+pipeline end-to-end with zero credentials; a multi-stage non-root `uv` container image with a
+stdlib `HEALTHCHECK`; and a shell-based docker-build + `/health` + `/metrics` smoke gate in CI.
+No new runtime dependency (`uvicorn` was approved in phase 6); there is still no production
+telemetry ingestion, documented as an explicit limitation.
 
 ## Product
 
@@ -45,7 +53,9 @@ Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29
 
 ## Validation
 
-Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
+Phase 9 uses the same locked clean-checkout gate as Phases 1–8, verified green on 2026-07-18
+(unittest with PostgreSQL and Gemini-live tests skipped; ruff/format/mypy clean; validator
+full pass), plus a container build and smoke test:
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -54,12 +64,30 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 - `uv run --locked ruff format --check .`
 - `uv run --locked mypy src tests`
 - `uv run --locked python scripts/validate_project.py`
+- `docker build -t incident-evidence-compiler:ci .` then a `/health` + `/metrics` smoke run
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 - `git diff --check`
-- One independent Phase 3 implementation review
+- One independent Phase 9 implementation review
 
 ## Accepted (recent)
 
+- The system is runnable and containerized (ADR 0016, devlog 0010): a composition-root
+  `runtime` package and `python -m incident_evidence_compiler` entrypoint wire the ports into a
+  FastAPI control plane plus an in-process lifespan worker loop; configuration is environment-only
+  and fail-fast (`AppConfig.from_env`), with a labelled non-model smoke LLM client
+  (`FirstSignalLLMClient`) and a labelled RCAEval-backed demo telemetry source
+  (`RcaevalTelemetrySource`) enabling a credential-free end-to-end boot. A multi-stage non-root
+  `uv` image health-checks `/health` with the stdlib, and a shell-based CI job builds and smoke-
+  tests it. No new runtime dependency; production telemetry ingestion remains an explicit non-goal.
+- Observability is Prometheus-only and dependency-free (ADR 0015, devlog 0009): a
+  standard-library `observability` package renders the Prometheus text exposition format; the
+  `Worker` records `iec_worker_jobs_total{outcome}`, `iec_worker_stage_duration_seconds{stage}`,
+  `iec_provider_timeouts_total`, `iec_llm_tokens_total{kind}`, and
+  `iec_investigation_verdicts_total{verdict}` into an injected registry with no tenant/PII
+  labels; the control plane exposes an open `GET /metrics`. OpenTelemetry spans and estimated
+  cost are deferred per the cut order. No new runtime dependency; the phase-aware validator
+  covers Phase 8. AI-assistant local traces now also gitignore the whole `.claude/` and
+  `.serena/` tool directories so they are never published.
 - RE2-OB is acquired locally under a guardrail (ADR 0009): downloaded and checksum-verified, stored and extracted outside the repository root so the validator's no-raw-data guarantee stays intact, never committed; CI stays hermetic on synthetic fixtures and fakes; RE2-TT stays sealed and RE2-SS reserved.
 - Missing and non-finite metric cells are gaps, not failures (ADR 0010): the loader drops the point for that signal at that timestamp (never zero), keeps the `time` column strict, treats a non-empty non-numeric cell as a hard `INVALID_NUMBER`, and exposes `dropped_cell_count` on `ParsedCase`. Verified against RE2-OB: parse coverage rose from 19/90 to 88/90 cases.
 
@@ -71,4 +99,13 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 5 (async LLM provider boundary) is in progress on branch `phase/05-llm-provider`. Phase 5a is committed (async `LLMClient` protocol, deterministic `FakeLLMClient`, and the untrusted restricted-hypothesis parser). Phase 5b adds `google-genai==2.12.1` (second runtime dependency) and a `GeminiLLMClient` with a per-attempt deadline, retry-once, token capture, and typed malformed-output failure; the validator is phase-aware for Phase 5 and Phases 1–3 still require an empty runtime dependency set. Hermetic gate is green (ruff/format/mypy clean, LLM tests green, one Gemini live-smoke test skipped without `GEMINI_API_KEY`, validate full pass). The Gemini path is exercised hermetically via an injected stub; a live call is verified only when `GEMINI_API_KEY` is set. Remaining: independent review, then Phase 6 (control plane + worker) per MASTER-PLAN.
+Phase 9 (runnable entrypoint + container) is code-complete with the full locked hermetic gate
+green (ruff/format/mypy clean; unittest 304 tests OK with PostgreSQL and Gemini-live tests
+skipped; validator full pass) and the container image building and passing its `/health` +
+`/metrics` smoke test locally. It awaits one independent review and Aswani's explicit commit
+approval; `pyproject.toml`/`uv.lock` are unchanged.
+
+Remaining v1 ship steps after the Phase 9 commit: one authorized sealed RE2-TT run (Step 4,
+opt-in and unauthorized by default) for a single held-out number; and the demo recording plus
+build-in-public posts (Step 5). OpenTelemetry spans and estimated cost remain deferred per the
+ADR 0015 cut order. Production telemetry ingestion is out of v1 scope (ADR 0016).

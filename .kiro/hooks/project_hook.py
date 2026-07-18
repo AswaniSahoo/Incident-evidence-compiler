@@ -21,7 +21,22 @@ SESSION_FINGERPRINT = re.compile(r"^[0-9a-f]{16}$")
 COMMIT_VALUE = re.compile(r"^(?:none|[0-9a-f]{7,40})$")
 SAFE_LABEL = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 BRANCH_CATEGORIES = frozenset({"main", "phase", "feature", "other", "unknown"})
-HOOK_EVENTS = frozenset({"agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"})
+HOOK_EVENTS = frozenset(
+    {
+        # Kiro's own hook event names.
+        "agentSpawn",
+        "userPromptSubmit",
+        "preToolUse",
+        "postToolUse",
+        "stop",
+        # Claude Code emits the same lifecycle PascalCase; this script is invoked by both.
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+    }
+)
 GIT_STATUS_VALUES = frozenset({"ok", "unavailable"})
 SAFE_TOKEN = re.compile(r"[^A-Za-z0-9_.:-]+")
 
@@ -267,20 +282,23 @@ def _blocked(message: str) -> int:
 def _guard(event: dict[str, Any] | None) -> int:
     if event is None:
         return _blocked("covered tool event was missing or malformed")
-    tool_name = str(event.get("tool_name", ""))
+    # Kiro emits "shell"/"write"; Claude Code emits "Bash"/"Write"/"Edit" (casefolded below).
+    tool_name = str(event.get("tool_name", "")).casefold()
     tool_input = event.get("tool_input")
     if not isinstance(tool_input, dict):
         return _blocked("covered tool input was missing or malformed")
 
-    if "shell" in tool_name or tool_name in {"execute_bash", "execute_cmd"}:
+    if "shell" in tool_name or tool_name in {"execute_bash", "execute_cmd", "bash"}:
         command = tool_input.get("command")
         if not isinstance(command, str) or not command.strip():
             return _blocked("shell command was missing or malformed")
         if _is_disallowed_git_command(command):
             return _blocked("the command matched a disallowed Git form")
 
-    if "write" in tool_name or tool_name in {"fs_write", "fsWrite"}:
+    if "write" in tool_name or tool_name in {"fs_write", "fswrite", "edit"}:
         candidate = tool_input.get("path")
+        if not isinstance(candidate, str) or not candidate.strip():
+            candidate = tool_input.get("file_path")
         if not isinstance(candidate, str) or not candidate.strip():
             return _blocked("write path was missing or malformed")
         path = Path(candidate)
@@ -310,6 +328,10 @@ def _stop(event: dict[str, Any]) -> int:
 
 
 def main() -> int:
+    # PROJECT_CONTEXT.md and devlogs are UTF-8 (em/en dashes); Windows inherits the
+    # console's legacy codepage on stdout/stderr unless told otherwise, mangling them.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     if len(sys.argv) != 2 or sys.argv[1] not in {"context", "log", "guard", "stop"}:
         print("usage: project_hook.py {context|log|guard|stop}", file=sys.stderr)
         return 1

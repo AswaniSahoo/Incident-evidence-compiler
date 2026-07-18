@@ -112,6 +112,52 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_llm.py",
         "tests/test_llm_gemini.py",
     ),
+    6: (
+        "docs/decisions/0013-control-plane-worker.md",
+        "docs/devlog/0007-phase-6-control-plane.md",
+        "src/incident_evidence_compiler/application/__init__.py",
+        "src/incident_evidence_compiler/application/errors.py",
+        "src/incident_evidence_compiler/application/contracts.py",
+        "src/incident_evidence_compiler/application/telemetry.py",
+        "src/incident_evidence_compiler/application/use_cases.py",
+        "src/incident_evidence_compiler/application/worker.py",
+        "src/incident_evidence_compiler/api/__init__.py",
+        "src/incident_evidence_compiler/api/app.py",
+        "src/incident_evidence_compiler/api/auth.py",
+        "tests/test_application.py",
+        "tests/test_api.py",
+    ),
+    7: (
+        "docs/decisions/0014-phase-7-real-data-evaluation.md",
+        "docs/devlog/0008-phase-7-real-data-evaluation.md",
+        "src/incident_evidence_compiler/evaluation/harness/__init__.py",
+        "src/incident_evidence_compiler/evaluation/harness/baseline_inputs.py",
+        "src/incident_evidence_compiler/evaluation/harness/scoring.py",
+        "src/incident_evidence_compiler/evaluation/harness/runner.py",
+        "scripts/run_evaluation.py",
+        "tests/test_evaluation.py",
+        "tests/test_real_data_integration.py",
+        "docs/evaluation/re2-ob-baseline.json",
+    ),
+    8: (
+        "docs/decisions/0015-phase-8-observability.md",
+        "docs/devlog/0009-phase-8-observability.md",
+        "src/incident_evidence_compiler/observability/__init__.py",
+        "src/incident_evidence_compiler/observability/metrics.py",
+        "tests/test_observability.py",
+    ),
+    9: (
+        "docs/decisions/0016-runnable-entrypoint-container.md",
+        "docs/devlog/0010-phase-9-runnable-entrypoint.md",
+        "Dockerfile",
+        "src/incident_evidence_compiler/__main__.py",
+        "src/incident_evidence_compiler/runtime/__init__.py",
+        "src/incident_evidence_compiler/runtime/config.py",
+        "src/incident_evidence_compiler/runtime/telemetry.py",
+        "src/incident_evidence_compiler/runtime/demo_llm.py",
+        "src/incident_evidence_compiler/runtime/server.py",
+        "tests/test_runtime.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -164,6 +210,10 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     3: PHASE1_CI_RUNS,
     4: PHASE1_CI_RUNS,
     5: PHASE1_CI_RUNS,
+    6: PHASE1_CI_RUNS,
+    7: PHASE1_CI_RUNS,
+    8: PHASE1_CI_RUNS,
+    9: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -181,6 +231,10 @@ REQUIRED_ACTIONS_BY_PHASE = {
     3: PHASE1_REQUIRED_ACTIONS,
     4: PHASE1_REQUIRED_ACTIONS,
     5: PHASE1_REQUIRED_ACTIONS,
+    6: PHASE1_REQUIRED_ACTIONS,
+    7: PHASE1_REQUIRED_ACTIONS,
+    8: PHASE1_REQUIRED_ACTIONS,
+    9: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -200,14 +254,18 @@ FORBIDDEN_PHASE0_PATHS = (
 )
 PHASE1_SCOPE_EXCEPTIONS = {"src", "pyproject.toml", "uv.lock"}
 PHASE4_SCOPE_EXCEPTIONS = {"docker-compose.yml"}
+# Phase 9 ships the runnable container image (ADR 0016).
+PHASE9_SCOPE_EXCEPTIONS = {"Dockerfile"}
 # Approved runtime dependencies and their resolved lock pins, introduced per phase.
 APPROVED_RUNTIME_DEPENDENCIES: dict[int, tuple[str, ...]] = {
     4: ("psycopg[binary]==3.3.4",),
     5: ("google-genai==2.12.1",),
+    6: ("fastapi==0.139.2", "uvicorn[standard]==0.51.0"),
 }
 APPROVED_LOCK_PACKAGES: dict[int, tuple[tuple[str, str], ...]] = {
     4: (("psycopg", "3.3.4"),),
     5: (("google-genai", "2.12.1"),),
+    6: (("fastapi", "0.139.2"), ("uvicorn", "0.51.0")),
 }
 LICENSE_ARTIFACTS = {"LICENSE", "COPYING", "NOTICE"}
 TEXT_SUFFIXES = {".md", ".json", ".py", ".yml", ".yaml", ".toml", ".lock"}
@@ -353,6 +411,8 @@ def _validate_phase_scope(phase: int, errors: list[str]) -> None:
         forbidden -= PHASE1_SCOPE_EXCEPTIONS
     if phase >= 4:
         forbidden -= PHASE4_SCOPE_EXCEPTIONS
+    if phase >= 9:
+        forbidden -= PHASE9_SCOPE_EXCEPTIONS
     if _license_recorded():
         forbidden -= LICENSE_ARTIFACTS
     for relative in sorted(forbidden):

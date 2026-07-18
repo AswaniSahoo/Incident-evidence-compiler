@@ -57,3 +57,9 @@ class ProviderUnavailableError(LLMError):
 
 class ProviderResponseError(LLMError):
     code = "provider_response_invalid"
+
+
+class ProposalsExhaustedError(LLMError):
+    """A test double ran out of scripted proposals (harness misconfiguration)."""
+
+    code = "proposals_exhausted"

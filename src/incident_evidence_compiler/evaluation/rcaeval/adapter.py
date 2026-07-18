@@ -39,9 +39,13 @@ class InvestigationCase:
 class EvaluationBatch:
     cases: tuple[InvestigationCase, ...]
     sidecar: EvaluationSidecar
+    skipped_case_count: int = 0
 
     def __repr__(self) -> str:
-        return f"EvaluationBatch(case_count={len(self.cases)})"
+        return (
+            f"EvaluationBatch(case_count={len(self.cases)}, "
+            f"skipped_case_count={self.skipped_case_count})"
+        )
 
 
 class RcaevalAdapter:
@@ -67,6 +71,7 @@ class RcaevalAdapter:
         sealed_permit: SealedSplitPermit | None = None,
         replay_destination: Path | None = None,
         sidecar_root: Path | None = None,
+        skip_unparsable_cases: bool = False,
     ) -> EvaluationBatch:
         try:
             return self._load(
@@ -75,6 +80,7 @@ class RcaevalAdapter:
                 sealed_permit=sealed_permit,
                 replay_destination=replay_destination,
                 sidecar_root=sidecar_root,
+                skip_unparsable_cases=skip_unparsable_cases,
             )
         except RcaevalLoadError as error:
             code = error.code
@@ -89,6 +95,7 @@ class RcaevalAdapter:
         sealed_permit: SealedSplitPermit | None = None,
         replay_destination: Path | None = None,
         sidecar_root: Path | None = None,
+        skip_unparsable_cases: bool = False,
     ) -> EvaluationBatch:
         parsed_split = parse_split(split)
         guard_split(parsed_split, sealed_permit)
@@ -97,9 +104,20 @@ class RcaevalAdapter:
         assigned: set[CaseId] = set()
         cases: list[InvestigationCase] = []
         entries: list[SidecarEntry] = []
+        skipped = 0
         for source in discovered:
             case_id = unique_case_id(self._case_id_factory, assigned)
-            parsed = parse_case(source, case_id, self._limits)
+            try:
+                parsed = parse_case(source, case_id, self._limits)
+            except RcaevalLoadError:
+                # A discovered case that fails the strict per-case parser (for example the
+                # documented trailing-empty-timestamp rows in RE2-OB, ADR 0010) is skipped
+                # and counted only when the caller opts in; the default stays strict so the
+                # hermetic gate is unchanged.
+                if not skip_unparsable_cases:
+                    raise
+                skipped += 1
+                continue
             cases.append(InvestigationCase(case_id, parsed_split, parsed.window, parsed.signals))
             entries.append(
                 SidecarEntry(
@@ -121,4 +139,4 @@ class RcaevalAdapter:
             if sidecar_root is None:
                 raise RcaevalLoadError(LoadErrorCode.SIDECAR_WRITE_FAILED) from None
             persist_sidecar(sidecar, replay_destination, sidecar_root=sidecar_root)
-        return EvaluationBatch(tuple(cases), sidecar)
+        return EvaluationBatch(tuple(cases), sidecar, skipped)
