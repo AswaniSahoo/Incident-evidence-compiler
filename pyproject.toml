@@ -9,8 +9,10 @@ description = "Evidence-grounded incident investigation with a deterministic bas
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fastapi==0.139.2",
     "google-genai==2.12.1",
     "psycopg[binary]==3.3.4",
+    "uvicorn[standard]==0.51.0",
 ]
 
 [dependency-groups]

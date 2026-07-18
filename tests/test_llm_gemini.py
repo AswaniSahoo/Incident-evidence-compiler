@@ -11,7 +11,7 @@ import os
 import unittest
 from datetime import timedelta
 
-from incident_evidence_compiler.domain.identifiers import RunId, TenantId
+from incident_evidence_compiler.domain.identifiers import IncidentId, RunId, TenantId
 from incident_evidence_compiler.domain.metrics import SignalKey
 from incident_evidence_compiler.llm import (
     GeminiLLMClient,
@@ -28,6 +28,7 @@ _GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 def _request() -> HypothesisRequest:
     return HypothesisRequest(
         tenant=TenantId("tenant-a"),
+        incident=IncidentId("inc-1"),
         run=RunId("run-1"),
         allowed_signals=frozenset({SignalKey("checkoutservice_cpu")}),
     )
@@ -121,6 +122,24 @@ class GeminiLLMClientTest(unittest.IsolatedAsyncioTestCase):
     def test_rejects_non_positive_max_attempts(self) -> None:
         with self.assertRaises(ValueError):
             GeminiLLMClient(_StubModels(), max_attempts=0)
+
+
+class UnwrapJsonTests(unittest.TestCase):
+    def test_unwraps_markdown_fenced_json(self) -> None:
+        from incident_evidence_compiler.llm.gemini import _unwrap_json
+
+        self.assertEqual(_unwrap_json('```json\n{"a": 1}\n```'), '{"a": 1}')
+        self.assertEqual(_unwrap_json('```\n{"a": 1}\n```'), '{"a": 1}')
+        self.assertEqual(_unwrap_json('{"a": 1}'), '{"a": 1}')
+        self.assertEqual(_unwrap_json('   {"a": 1}   '), '{"a": 1}')
+
+
+class GeminiFencedResponseTest(unittest.IsolatedAsyncioTestCase):
+    async def test_fenced_json_response_is_unwrapped_before_return(self) -> None:
+        stub = _StubModels(response=_StubResponse('```json\n{"predicates": []}\n```'))
+        client = GeminiLLMClient(stub, model="gemini-test", deadline=timedelta(seconds=5))
+        proposal = await client.propose_metric_hypotheses(_request())
+        self.assertEqual(proposal.raw_json, '{"predicates": []}')
 
 
 @unittest.skipUnless(_GEMINI_API_KEY, "requires GEMINI_API_KEY for a live Gemini smoke test")
