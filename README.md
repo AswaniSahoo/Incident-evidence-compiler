@@ -1,40 +1,64 @@
 # Incident Evidence Compiler
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-304_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Runtime deps](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#engineering-principles)
+[![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
+[![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-A clean-room, production-oriented system for **evidence-grounded incident investigation**: it
-compiles microservice telemetry into a replayable, content-addressed evidence ledger, lets a
-language model propose *restricted* hypotheses, and **verifies them deterministically** as
-`SUPPORTED`, `REFUTED`, or `UNKNOWN` — so every accepted conclusion is tenant-authorized,
-temporally valid, replayable, and linked to verifiable evidence.
+An incident-investigation service where a language model is allowed to *guess*, but only
+deterministic code is allowed to *decide*.
 
-> **The thesis:** an LLM may *propose*, but trusted, deterministic code *decides*. `UNKNOWN`
-> is a first-class answer, distinct from false.
+It takes microservice telemetry, compiles it into a content-addressed evidence ledger, and lets
+Gemini propose restricted hypotheses over an allow-list of signals. Every hypothesis is then
+checked by a deterministic verifier that returns one of three answers: `SUPPORTED`, `REFUTED`,
+or `UNKNOWN`. Nothing the model says is trusted until the verifier agrees, and `UNKNOWN` is a
+real answer, not a polite way of saying "no."
 
-## Status
+The whole thing is built the way I'd build a real backend: framework-independent domain,
+PostgreSQL as the source of truth, a `SKIP LOCKED` worker queue, every external call on a
+deadline, and a test suite that runs with no database, no network, and no credentials.
 
-**Phases 0–9 in progress** — a verified deterministic domain, PostgreSQL persistence with a
-`SKIP LOCKED` worker queue, an async LLM provider boundary, a FastAPI control plane, a
-real-data evaluation on RCAEval RE2-OB, a dependency-free Prometheus `/metrics` endpoint, and a
-runnable entrypoint (`python -m incident_evidence_compiler`) with a multi-stage container image
-and a docker-build + smoke gate in CI. See [Roadmap](#roadmap) for what remains for a full v1
-(OpenTelemetry spans, a sealed held-out run, production telemetry ingestion).
+## Results
 
-## Why this exists
+Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
+row). Metrics are aggregate and label-free; the raw artifacts live in
+[`docs/evaluation/`](docs/evaluation/).
 
-Operational incidents produce fragmented and sometimes contradictory metrics, logs, traces,
-and deployment events. Language models can summarize this evidence, but they must not be
-trusted to invent data access, execute arbitrary queries, or assert unsupported causes.
+| Arm | Top-1 | Top-3 | MRR | Abstention | Invalid evidence IDs |
+|---|---|---|---|---|---|
+| Baseline (deterministic) | **0.932** | **0.989** | **0.959** | 0.000 | 0 |
+| + Gemini (`gemini-2.5-flash`, verified) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | 0 |
 
-> How can an AI system propose useful incident hypotheses while every accepted conclusion
-> remains tenant-authorized, temporally valid, replayable, and linked to verifiable evidence?
+Here's the honest part, because it's the interesting part. The deterministic baseline sees the
+actual metric values and localizes the faulty service well. The Gemini arm is handed only the
+signal *names* — never the values — so it's guessing among ~72 signals, and it often names a
+downstream symptom instead of the cause. It does badly. That's fine. The point of the system is
+that the verifier gates those guesses: the model abstained or got filtered half the time, and it
+produced **zero** invalid evidence citations. The LLM can be wrong without the system being
+wrong.
 
-## Architecture
+These are development numbers. RE2-TT stays sealed and RE2-SS is reserved, so I don't claim a
+held-out result yet — see [Roadmap](#roadmap). Method notes:
+[ADR 0014](docs/decisions/0014-phase-7-real-data-evaluation.md).
 
-Framework-independent layers with dependency inversion — the domain knows nothing about
-FastAPI, PostgreSQL, or the Gemini SDK; infrastructure sits behind ports.
+## The question I was trying to answer
+
+Real incidents throw off a mess of metrics, logs, traces, and deploy events that don't always
+agree with each other. An LLM is genuinely good at reading that mess and summarizing it. What it
+should never be allowed to do is invent a data source, run a query, or assert a cause you can't
+check.
+
+So: how do you let a model help with incident triage while keeping every accepted conclusion
+tenant-scoped, valid for the time window it claims, replayable byte-for-byte, and tied to
+evidence you can point at? This repo is my answer.
+
+## How it works
+
+The domain knows nothing about FastAPI, PostgreSQL, or the Gemini SDK. Everything external sits
+behind a port, which is what makes the domain testable in isolation and the infrastructure
+swappable.
 
 ```mermaid
 flowchart TD
@@ -54,10 +78,10 @@ flowchart TD
     class LLM,TEL untrusted;
 ```
 
-Green = trusted (deterministic domain, durable store). Red = untrusted input (model output
-and telemetry) that must pass strict validation before it is believed.
+Green is trusted: the deterministic domain and the durable store. Red is untrusted input, model
+output and raw telemetry, which has to pass strict validation before anyone believes it.
 
-## The verification pipeline
+And here's a single investigation end to end:
 
 ```mermaid
 sequenceDiagram
@@ -85,33 +109,34 @@ sequenceDiagram
     API-->>C: verdicts + evidence IDs (or 409 if not ready)
 ```
 
-The worker's external LLM call is bounded by a per-attempt deadline; provider failures are
-retried then terminal; malformed model output is terminal and records only a stable error
-code — never model text.
+The call out to the model is bounded by a per-attempt deadline. A provider failure is retried
+and then gives up; malformed model output is terminal and records only a stable error code,
+never the model's text. A stalled model can't wedge the worker.
 
-## Verdict semantics (the output contract)
+## What the verifier actually promises
 
-Every predicate resolves to exactly one three-valued verdict. `UNKNOWN` fails **closed**.
+Every predicate resolves to exactly one of three verdicts, and `UNKNOWN` fails closed.
 
-| Verdict | Meaning | Evidence cited |
+| Verdict | When | Evidence cited |
 |---|---|---|
-| `SUPPORTED` | The metric shifted in the asserted direction at/above the frozen minimum score. | supporting evidence IDs |
-| `REFUTED` | The eligible metric shifted in the **opposite** direction. | contradicting evidence IDs |
-| `UNKNOWN` | Evidence is missing, stale, ineligible, weak, context-mismatched, or the claim is causal. | none |
+| `SUPPORTED` | The metric shifted in the asserted direction, at or above the frozen minimum score. | supporting IDs |
+| `REFUTED` | The eligible metric shifted the *opposite* way. | contradicting IDs |
+| `UNKNOWN` | Evidence is missing, stale, ineligible, too weak, context-mismatched, or the claim is causal. | none |
 
-A composed hypothesis is `ALL` (every predicate must hold) or `ANY` (at least one). A causal
-claim or a tenant/incident/run context mismatch is `UNKNOWN` by construction — the model
-cannot talk its way past the verifier.
+A composed hypothesis is either `ALL` (every predicate must hold) or `ANY` (at least one). A
+causal claim, or a tenant/incident/run that doesn't match the ledger, comes back `UNKNOWN` by
+construction. There's no prompt that talks its way past this, because the verdict is decided by
+code that never reads the prompt.
 
 ## Quickstart
 
-Prerequisites: **Python 3.12** and **uv 0.11.17** (the build/lock tool; exact-pinned).
+You need Python 3.12 and uv 0.11.17 (the lock/build tool, exact-pinned).
 
 ```bash
 uv sync --locked
 ```
 
-Run the hermetic gate (no database, network, or credentials required):
+Run the hermetic gate. No database, no network, no credentials:
 
 ```bash
 uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
@@ -121,22 +146,67 @@ uv run --locked mypy src tests
 uv run --locked python scripts/validate_project.py
 ```
 
-### HTTP API
+## Run the service
 
-The control plane is a FastAPI app built by `create_app(uow_factory=..., tokens=...)`
-(`src/incident_evidence_compiler/api/app.py`). Authentication is a static bearer token mapped
-to a tenant; every data route is tenant-scoped, and a cross-tenant lookup returns `404` (never
-`403`) to avoid leaking existence. `/health` is the only unauthenticated route.
+`python -m incident_evidence_compiler` wires the persistence, LLM, and telemetry ports from
+environment variables into the control plane plus an in-process worker loop (ADR 0016). Config
+is environment-only and fail-fast: a missing or invalid value stops startup with a stable,
+secret-free message instead of booting into a half-configured state.
+
+```bash
+# Credential-free smoke: in-memory store, non-model smoke client, no telemetry.
+IEC_TOKENS=dev-token=tenant-a uv run --locked python -m incident_evidence_compiler
+# serves 127.0.0.1:8000  (GET /health, GET /metrics)
+```
+
+```bash
+# The real thing: PostgreSQL, Gemini on Vertex AI, RCAEval-backed demo telemetry.
+IEC_TOKENS=prod-token=tenant-a \
+IEC_PERSISTENCE=postgres IEC_DATABASE_URL=postgresql://iec@localhost/iec \
+IEC_LLM_PROVIDER=vertex IEC_GEMINI_PROJECT=<gcp-project> IEC_GEMINI_LOCATION=us-central1 \
+IEC_TELEMETRY=rcaeval IEC_RE2_ROOT=/path/to/RE2/RE2-OB \
+uv run --locked python -m incident_evidence_compiler
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `IEC_TOKENS` | required | `token=tenant` pairs, comma-separated. Never logged. |
+| `IEC_PERSISTENCE` | `memory` | `memory`, or `postgres` (then `IEC_DATABASE_URL` is required). |
+| `IEC_LLM_PROVIDER` | `fake` | `fake` (non-model smoke), `developer` (`GEMINI_API_KEY`), or `vertex` (`IEC_GEMINI_PROJECT`). |
+| `IEC_TELEMETRY` | `none` | `none`, or `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split). |
+| `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image binds `0.0.0.0`). |
+
+Or run the container. It's a multi-stage uv build, runs as a non-root user, and health-checks
+`/health` with the standard library (no curl in the image):
+
+```bash
+docker build -t incident-evidence-compiler .
+docker run --rm -p 8000:8000 -e IEC_TOKENS=dev-token=tenant-a incident-evidence-compiler
+curl -fsS http://127.0.0.1:8000/health
+```
+
+One thing I want to be straight about: `IEC_LLM_PROVIDER=fake` is a labelled smoke client, not a
+model, and `IEC_TELEMETRY=rcaeval` is a demo bridge over the benchmark, not a production
+ingestion path (see [what it doesn't do](#what-it-doesnt-do-yet)). `/health` and `/metrics` are
+open on purpose; put them behind your network boundary when you deploy.
+
+## HTTP API
+
+The control plane is built by `create_app(uow_factory=..., tokens=...)` in
+[`api/app.py`](src/incident_evidence_compiler/api/app.py). Auth is a static bearer token mapped
+to a tenant. Every data route is tenant-scoped, and a cross-tenant lookup returns `404`, not
+`403`, so you can't probe for which investigations exist. `/health` and `/metrics` are the only
+open routes.
 
 | Method & path | Purpose | Success | Notable errors |
 |---|---|---|---|
 | `GET /health` | Liveness (open) | `200 {"status":"ok"}` | — |
-| `GET /metrics` | Prometheus metrics (open, no tenant/PII labels) | `200 text/plain` | — |
-| `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401 unauthorized`, `422 <code>` |
+| `GET /metrics` | Prometheus text (open, no tenant/PII labels) | `200 text/plain` | — |
+| `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401`, `422 <code>` |
 | `GET /investigations/{id}` | Status | `200 {"investigation_id","status"}` | `401`, `404 investigation_not_found` |
 | `GET /investigations/{id}/report` | Verified report | `200 {...,"report":{...}}` | `404`, `409 report_not_ready` |
 
-Request body for `POST /investigations`:
+`POST /investigations` body:
 
 ```json
 {
@@ -150,7 +220,7 @@ Request body for `POST /investigations`:
 }
 ```
 
-Report response (the deterministic verification result):
+The report you get back is the verification result:
 
 ```json
 {
@@ -175,56 +245,15 @@ Report response (the deterministic verification result):
 }
 ```
 
-All error bodies are a flat `{"code": "<stable_code>"}` — never model text, tenant data, or
-internals.
+Every error body is a flat `{"code": "<stable_code>"}`. No model text, no tenant data, no
+internals cross the boundary.
 
-### Run the service
+## Optional integration checks
 
-The entrypoint (`python -m incident_evidence_compiler`, ADR 0016) wires the persistence, LLM,
-and telemetry ports selected by environment variables into the FastAPI control plane plus an
-in-process worker loop. Configuration is environment-only and **fail-fast**: any missing or
-invalid value stops startup with a stable, secret-free message.
+These are excluded from the hermetic gate because they need real infrastructure:
 
 ```bash
-# Credential-free local smoke: in-memory store, non-model smoke LLM, no telemetry.
-IEC_TOKENS=dev-token=tenant-a uv run --locked python -m incident_evidence_compiler
-# -> serves on 127.0.0.1:8000 (GET /health, GET /metrics)
-```
-
-```bash
-# Real end-to-end: durable PostgreSQL, Gemini via Vertex AI, RCAEval-backed demo telemetry.
-IEC_TOKENS=prod-token=tenant-a \
-IEC_PERSISTENCE=postgres IEC_DATABASE_URL=postgresql://iec@localhost/iec \
-IEC_LLM_PROVIDER=vertex IEC_GEMINI_PROJECT=<gcp-project> IEC_GEMINI_LOCATION=us-central1 \
-IEC_TELEMETRY=rcaeval IEC_RE2_ROOT=/path/to/RE2/RE2-OB \
-uv run --locked python -m incident_evidence_compiler
-```
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `IEC_TOKENS` | — (required) | `token=tenant` pairs, comma-separated. Never logged. |
-| `IEC_PERSISTENCE` | `memory` | `memory` or `postgres` (then `IEC_DATABASE_URL` is required). |
-| `IEC_LLM_PROVIDER` | `fake` | `fake` (non-model smoke), `developer` (`GEMINI_API_KEY`), or `vertex` (`IEC_GEMINI_PROJECT`). |
-| `IEC_TELEMETRY` | `none` | `none` or `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split). |
-| `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image defaults the host to `0.0.0.0`). |
-
-Or build and run the container image (multi-stage `uv` build, non-root, stdlib healthcheck):
-
-```bash
-docker build -t incident-evidence-compiler .
-docker run --rm -p 8000:8000 -e IEC_TOKENS=dev-token=tenant-a incident-evidence-compiler
-curl -fsS http://127.0.0.1:8000/health
-```
-
-> **Scope note:** `IEC_LLM_PROVIDER=fake` is a labelled non-model smoke client and
-> `IEC_TELEMETRY=rcaeval` is a labelled demo source — there is **no production telemetry
-> ingestion** yet (see [Limitations](#limitations)). `/health` and `/metrics` are open by design
-> and should be network-restricted at deployment.
-
-### Optional integration checks (excluded from the hermetic gate)
-
-```bash
-# PostgreSQL: start a database, point DATABASE_URL at it, then:
+# PostgreSQL:
 docker compose up -d
 uv run --locked python -m unittest tests.test_persistence_postgres
 
@@ -232,10 +261,10 @@ uv run --locked python -m unittest tests.test_persistence_postgres
 GEMINI_API_KEY=… uv run --locked python -m unittest tests.test_llm_gemini
 ```
 
-### Reproduce the evaluation
+## Reproduce the evaluation
 
-RCAEval RE2 data is **never committed** and lives outside the repository (ADR 0009). Point the
-loader at your own extracted split:
+The RCAEval RE2 data is never committed and lives outside the repo (ADR 0009). Point the loader
+at your own extracted split:
 
 ```bash
 # Deterministic baseline arm (no network):
@@ -243,7 +272,7 @@ uv run --locked python scripts/run_evaluation.py \
     --root /path/to/RE2/RE2-OB --arm baseline \
     --out docs/evaluation/re2-ob-baseline.json
 
-# Verifier-gated Gemini arm via Vertex AI (ADC) or the Developer API key:
+# Verifier-gated Gemini arm (Vertex AI via ADC, or a Developer API key):
 uv run --locked python scripts/run_evaluation.py \
     --root /path/to/RE2/RE2-OB --arm gemini \
     --provider vertex --project <gcp-project> --location us-central1 \
@@ -251,29 +280,11 @@ uv run --locked python scripts/run_evaluation.py \
     --out docs/evaluation/re2-ob-gemini.json
 ```
 
-## Evaluation results (RCAEval RE2-OB, development split)
-
-Measured on 88 cases (2 skipped for a trailing-empty-timestamp row); aggregate, label-free
-artifacts are committed under [`docs/evaluation/`](docs/evaluation/).
-
-| Arm | Top-1 | Top-3 | MRR | Abstention | Invalid evidence IDs |
-|---|---|---|---|---|---|
-| Baseline (deterministic) | **0.932** | **0.989** | **0.959** | 0.000 | **0** |
-| +Gemini (`gemini-2.5-flash`, verified) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | **0** |
-
-The deterministic baseline sees the metric values and localizes the injected service well on
-the observable split. The Gemini arm receives only signal *names* (never the values), so it
-guesses among ~72 signals and often proposes downstream symptoms; the deterministic verifier
-gates those guesses (50% abstention, **zero** invalid evidence citations). RE2-OB is the
-observable split; RE2-TT stays sealed and RE2-SS reserved, so these are **development**
-numbers, not a held-out claim. See
-[`docs/decisions/0014-phase-7-real-data-evaluation.md`](docs/decisions/0014-phase-7-real-data-evaluation.md).
-
-## Repository layout
+## Layout
 
 ```text
 src/incident_evidence_compiler/
-  domain/         # stdlib-only: baseline, evidence ledger, verifier, change events, serialization
+  domain/         # stdlib only: baseline, evidence ledger, verifier, change events, serialization
   persistence/    # psycopg repositories, in-memory fakes, migrations, SKIP LOCKED job queue
   llm/            # async LLMClient protocol, FakeLLMClient, untrusted parser, Gemini adapter
   application/    # framework-independent use-cases + the Worker + TelemetrySource port
@@ -282,67 +293,65 @@ src/incident_evidence_compiler/
   runtime/        # composition root: env config, wiring, worker loop, python -m entrypoint
   evaluation/
     rcaeval/      # bounded, label-safe RCAEval RE2 adapter + evaluation-only sidecar
-    harness/      # baseline-input bridge, scoring, and the two-arm runner
+    harness/      # baseline-input bridge, scoring, two-arm runner
 scripts/          # validate_project.py (governance gate), run_evaluation.py
 tests/            # hermetic unit/integration tests (fakes + deterministic LLM)
 docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, architecture
 ```
 
-## Engineering principles
+## Principles (the ones I actually held)
 
-- Contracts before orchestration.
-- Deterministic baseline before an LLM.
-- `UNKNOWN` is distinct from false.
-- PostgreSQL is the durable source of truth.
-- Model output is untrusted input.
-- External calls are bounded by deadlines and budgets.
-- Features must earn their complexity through tests or measurements.
-- Documentation must not claim more than committed evidence proves.
+- Write the contracts before the orchestration.
+- Get a deterministic baseline working before adding a model.
+- Treat `UNKNOWN` as a first-class answer, not a rounding error toward "no."
+- PostgreSQL is the source of truth; everything else is a cache or a guess.
+- Model output is untrusted input, always, everywhere.
+- Every external call gets a deadline.
+- A feature earns its complexity with a test or a measurement, or it doesn't ship.
+- The README never claims more than a committed artifact can back up.
 
-## Limitations
+## What it doesn't do (yet)
 
-- **Development-set evaluation only.** RE2-OB is the observable (easiest) split; RE2-TT stays
-  sealed and RE2-SS reserved. No held-out accuracy is claimed.
-- **Metrics, but no tracing yet.** A dependency-free Prometheus `/metrics` endpoint exposes
-  per-stage latency, job outcomes, provider-timeout rate, token counts, and verdict
-  distribution (no tenant/PII labels). OpenTelemetry spans and estimated cost are deferred.
-- **No production telemetry ingestion.** The system is runnable (`python -m
-  incident_evidence_compiler` / container image), but the only telemetry sources are the
-  in-memory fake and a labelled RCAEval-backed **demo** source; a durable, tenant-owned
-  telemetry ledger is future work. The worker also runs in-process (single-node v1).
-- **The LLM arm is intentionally blind to metric values.** Its low localization accuracy
-  reflects that design (the verifier is the source of truth), not a defect.
-- **The baseline policy is a documented default,** not a calibrated risk–coverage curve.
-- **Single-node PostgreSQL queue.** Redis admission control is deferred (ADR 0007).
+I'd rather list this plainly than let you find it the hard way.
+
+- **The evaluation is development-set only.** RE2-OB is the observable, easiest split. RE2-TT is
+  sealed and RE2-SS is reserved, so there's no held-out number yet.
+- **The LLM arm is deliberately blind to metric values.** Its low accuracy is the design working
+  as intended (the verifier is the source of truth), not a bug I forgot to fix.
+- **No production telemetry ingestion.** The service runs, but its only telemetry sources are the
+  in-memory fake and a demo bridge over the RCAEval benchmark. A durable, tenant-owned telemetry
+  ledger is future work. The worker also runs in-process; splitting it out is a later change.
+- **Metrics, but no tracing.** There's a dependency-free Prometheus `/metrics` endpoint (per-stage
+  latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
+  OpenTelemetry spans and cost estimation are deferred.
+- **The baseline policy is a sensible default,** not a calibrated risk–coverage curve.
+- **Single-node Postgres queue.** Redis admission control is deferred (ADR 0007).
 
 ## Roadmap
 
-- Observability: OpenTelemetry spans per stage and estimated cost (Prometheus counters and
-  stage-latency histograms are already exposed at `/metrics`).
-- Production telemetry ingestion (a durable, tenant-owned source beyond the RCAEval demo bridge)
-  and an optional separate worker process.
-- A single, authorized sealed RE2-TT run for a held-out number.
+- One authorized, frozen run against the sealed RE2-TT split for a real held-out number
+  ([protocol](docs/evaluation/re2-tt-sealed-protocol.md)).
+- Production telemetry ingestion beyond the RCAEval demo bridge, and an optional separate worker
+  process.
+- OpenTelemetry spans per stage and an estimated-cost metric (the Prometheus counters and latency
+  histograms already ship at `/metrics`).
 
 ## Provenance
 
-This is an independent rewrite. It contains no source copied from
-`yashprogrammer/EnterpriseRAG_live`, which was audited as a learning prototype and is cited in
-[`docs/provenance.md`](docs/provenance.md).
+This is an independent rewrite. No source is copied from `yashprogrammer/EnterpriseRAG_live`,
+which I audited as a learning reference and cite in [`docs/provenance.md`](docs/provenance.md).
 
 ## License
 
-Source, documentation, and configuration are licensed under the Apache License 2.0 — see
-[`LICENSE`](LICENSE) and
-[`docs/decisions/0008-apache-2.0-license.md`](docs/decisions/0008-apache-2.0-license.md).
-RCAEval dataset licensing is separate and documented in
-[`docs/datasets/rcaeval-re2.md`](docs/datasets/rcaeval-re2.md); raw benchmark data is never
-committed.
+Source, docs, and config are Apache-2.0 — see [`LICENSE`](LICENSE) and
+[ADR 0008](docs/decisions/0008-apache-2.0-license.md). RCAEval dataset licensing is separate and
+documented in [`docs/datasets/rcaeval-re2.md`](docs/datasets/rcaeval-re2.md); the raw benchmark
+data is never committed.
 
-## Project governance
+## If you want to read further
 
-- [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) — compact current state loaded by the project agent.
-- [`AGENTS.md`](AGENTS.md) — agent and contributor operating contract.
-- [`.kiro/steering/`](.kiro/steering/) — persistent workspace rules.
-- [`docs/decisions/`](docs/decisions/) — architecture decision records.
-- [`docs/devlog/`](docs/devlog/) — evidence-based phase journals.
-- [`docs/architecture/overview.md`](docs/architecture/overview.md) — component and trust-boundary detail.
+- [`docs/decisions/`](docs/decisions/) — the 16 ADRs, where the real design arguments are.
+- [`docs/devlog/`](docs/devlog/) — a phase-by-phase journal with the evidence behind each claim.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) — components and trust
+  boundaries in more detail.
+- [`AGENTS.md`](AGENTS.md) — the operating contract for anyone (human or agent) working in here.
