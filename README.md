@@ -342,7 +342,6 @@ committed.
 
 - [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) — compact current state loaded by the project agent.
 - [`AGENTS.md`](AGENTS.md) — agent and contributor operating contract.
-- [`MASTER-PLAN.md`](MASTER-PLAN.md) — the sprint plan and v1 release gates.
 - [`.kiro/steering/`](.kiro/steering/) — persistent workspace rules.
 - [`docs/decisions/`](docs/decisions/) — architecture decision records.
 - [`docs/devlog/`](docs/devlog/) — evidence-based phase journals.
