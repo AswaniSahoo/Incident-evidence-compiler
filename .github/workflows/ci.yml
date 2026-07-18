@@ -48,3 +48,26 @@ jobs:
 
       - name: Check committed whitespace errors
         run: git show --check --oneline --format=fuller HEAD
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build the container image
+        run: docker build -t incident-evidence-compiler:ci .
+
+      - name: Smoke test the running container
+        run: |
+          docker run -d --name iec-smoke -p 8000:8000 \
+            -e IEC_TOKENS=smoke-token=tenant-a \
+            incident-evidence-compiler:ci
+          ok=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          if [ "$ok" != "1" ]; then docker logs iec-smoke; docker rm -f iec-smoke; exit 1; fi
+          curl -fsS http://127.0.0.1:8000/metrics >/dev/null
+          docker rm -f iec-smoke
