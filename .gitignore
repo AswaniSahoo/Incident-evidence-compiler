@@ -49,3 +49,5 @@ data/RE2/
 
 # AI assistant local traces (never published)
 CLAUDE.md
+.claude/
+.serena/

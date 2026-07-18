@@ -36,6 +36,13 @@ class GuardTests(unittest.TestCase):
             "tool_input": {"command": command},
         }
 
+    def claude_bash_event(self, command: str) -> dict[str, object]:
+        return {
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }
+
     def test_allows_expected_git_commands(self) -> None:
         commands = (
             "git status --short",
@@ -47,10 +54,11 @@ class GuardTests(unittest.TestCase):
             "git branch -m old-name new-name",
             "git branch -c source copy",
         )
-        for command in commands:
-            with self.subTest(command=command):
-                result = self.run_guard(self.shell_event(command))
-                self.assertEqual(result.returncode, 0, result.stderr)
+        for build_event in (self.shell_event, self.claude_bash_event):
+            for command in commands:
+                with self.subTest(command=command, tool_name=build_event(command)["tool_name"]):
+                    result = self.run_guard(build_event(command))
+                    self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_blocks_disallowed_git_variants(self) -> None:
         commands = (
@@ -80,32 +88,46 @@ class GuardTests(unittest.TestCase):
             "git restore .",
             "git checkout .",
         )
-        for command in commands:
-            with self.subTest(command=command):
-                result = self.run_guard(self.shell_event(command))
-                self.assertEqual(result.returncode, 2, result.stderr)
+        for build_event in (self.shell_event, self.claude_bash_event):
+            for command in commands:
+                with self.subTest(command=command, tool_name=build_event(command)["tool_name"]):
+                    result = self.run_guard(build_event(command))
+                    self.assertEqual(result.returncode, 2, result.stderr)
 
     def test_write_tool_is_limited_to_workspace(self) -> None:
-        inside = self.run_guard(
-            {
-                "hook_event_name": "preToolUse",
-                "tool_name": "write",
-                "tool_input": {"path": "PROJECT_CONTEXT.md"},
-            }
+        variants = (
+            ("write", "path"),
+            ("Write", "file_path"),
+            ("Edit", "file_path"),
         )
-        self.assertEqual(inside.returncode, 0, inside.stderr)
+        for tool_name, field in variants:
+            with self.subTest(tool_name=tool_name):
+                inside = self.run_guard(
+                    {
+                        "hook_event_name": "preToolUse",
+                        "tool_name": tool_name,
+                        "tool_input": {field: "PROJECT_CONTEXT.md"},
+                    }
+                )
+                self.assertEqual(inside.returncode, 0, inside.stderr)
 
-        outside = self.run_guard(
-            {
-                "hook_event_name": "preToolUse",
-                "tool_name": "write",
-                "tool_input": {"path": str(ROOT.parent / "outside.txt")},
-            }
-        )
-        self.assertEqual(outside.returncode, 2, outside.stderr)
+                outside = self.run_guard(
+                    {
+                        "hook_event_name": "preToolUse",
+                        "tool_name": tool_name,
+                        "tool_input": {field: str(ROOT.parent / "outside.txt")},
+                    }
+                )
+                self.assertEqual(outside.returncode, 2, outside.stderr)
 
     def test_covered_tools_fail_closed_on_malformed_input(self) -> None:
-        for event in ({}, {"tool_name": "shell"}, {"tool_name": "write", "tool_input": {}}):
+        for event in (
+            {},
+            {"tool_name": "shell"},
+            {"tool_name": "write", "tool_input": {}},
+            {"tool_name": "Bash"},
+            {"tool_name": "Write", "tool_input": {}},
+        ):
             with self.subTest(event=event):
                 result = self.run_guard(event)
                 self.assertEqual(result.returncode, 2, result.stderr)
@@ -135,6 +157,28 @@ class LoggingTests(unittest.TestCase):
         for branch, expected in cases.items():
             with self.subTest(branch=branch):
                 self.assertEqual(project_hook._branch_category(branch), expected)
+
+    def test_accepts_claude_code_hook_event_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            log_path = Path(directory) / "events.jsonl"
+            project_hook.LOG_PATH = log_path
+            claude_event_names = (
+                "SessionStart",
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "Stop",
+            )
+            with patch.object(project_hook, "_git_state", return_value=self.git_state):
+                for hook_event_name in claude_event_names:
+                    with self.subTest(hook_event_name=hook_event_name):
+                        project_hook._append_log(
+                            {"hook_event_name": hook_event_name, "tool_name": "Bash"}
+                        )
+            records = [
+                json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual([record["event"] for record in records], list(claude_event_names))
 
     def test_log_contains_only_sanitized_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
