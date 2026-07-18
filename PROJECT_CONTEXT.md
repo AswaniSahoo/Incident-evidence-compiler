@@ -4,16 +4,18 @@ Last verified: 2026-07-18
 
 ## Current phase
 
-Phase 7 — real-data integration and development evaluation — is in progress on branch `phase/07-real-data` (not yet merged to `main`). Phases 0–6 are committed in this branch's history: the deterministic domain, persistence (verified against live PostgreSQL 16), the async LLM provider boundary, and the FastAPI control plane and worker.
+Phase 8 — observability (Prometheus metrics) — is implemented on branch `phase/07-real-data` with the full locked hermetic gate verified green (2026-07-18); it is pending one independent review and Aswani's explicit commit approval. Phases 0–7 are committed in this branch's history (through the Phase 7 real-data evaluation); Phase 8 adds dependency-free metrics and an open `/metrics` endpoint as part of v1 hardening.
 
 ## Current objective
 
-Integrate the real RCAEval RE2-OB split end-to-end and measure it (Phase 7): a label-safe
-`evaluation/harness` that bridges adapter-loaded telemetry into deterministic-baseline
-inputs, scores root-cause-service localization (Top-1/Top-3/MRR, abstention, invalid-evidence
-count), and runs two arms — a deterministic baseline and a verifier-gated Gemini arm — with
-committed aggregate, label-free metrics. Ground truth stays in the evaluation sidecar and
-never reaches investigation code; raw data is never committed; CI stays hermetic.
+Make the pipeline observable for v1 hardening (Phase 8): a dependency-free `observability`
+package exposing a thread-safe `MetricsRegistry` of counters and histograms in the Prometheus
+text exposition format (cumulative buckets with `_sum`/`_count`/`+Inf`); worker
+instrumentation of per-stage latency, job outcomes, provider-timeout rate, LLM token counts,
+and verdict distribution recorded into an injected registry with no tenant/PII labels; and an
+open `GET /metrics` route on the control plane. No new runtime dependency
+(`pyproject.toml`/`uv.lock` unchanged); the label-safety and hermetic-CI invariants are
+unchanged (ADR 0015, devlog 0009).
 
 ## Product
 
@@ -50,7 +52,9 @@ Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29
 
 ## Validation
 
-Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
+Phase 8 uses the same locked clean-checkout gate as Phases 1–7, verified green on 2026-07-18
+(unittest with PostgreSQL and Gemini-live tests skipped; ruff/format/mypy clean; validator
+full pass):
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -61,10 +65,19 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 - `uv run --locked python scripts/validate_project.py`
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 - `git diff --check`
-- One independent Phase 3 implementation review
+- One independent Phase 8 implementation review
 
 ## Accepted (recent)
 
+- Observability is Prometheus-only and dependency-free (ADR 0015, devlog 0009): a
+  standard-library `observability` package renders the Prometheus text exposition format; the
+  `Worker` records `iec_worker_jobs_total{outcome}`, `iec_worker_stage_duration_seconds{stage}`,
+  `iec_provider_timeouts_total`, `iec_llm_tokens_total{kind}`, and
+  `iec_investigation_verdicts_total{verdict}` into an injected registry with no tenant/PII
+  labels; the control plane exposes an open `GET /metrics`. OpenTelemetry spans and estimated
+  cost are deferred per the cut order. No new runtime dependency; the phase-aware validator
+  covers Phase 8. AI-assistant local traces now also gitignore the whole `.claude/` and
+  `.serena/` tool directories so they are never published.
 - RE2-OB is acquired locally under a guardrail (ADR 0009): downloaded and checksum-verified, stored and extracted outside the repository root so the validator's no-raw-data guarantee stays intact, never committed; CI stays hermetic on synthetic fixtures and fakes; RE2-TT stays sealed and RE2-SS reserved.
 - Missing and non-finite metric cells are gaps, not failures (ADR 0010): the loader drops the point for that signal at that timestamp (never zero), keeps the `time` column strict, treats a non-empty non-numeric cell as a hard `INVALID_NUMBER`, and exposes `dropped_cell_count` on `ParsedCase`. Verified against RE2-OB: parse coverage rose from 19/90 to 88/90 cases.
 
@@ -76,20 +89,13 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 7 (real-data integration + development evaluation) is implemented on branch
-`phase/07-real-data` (ADR 0014, devlog 0008). A label-safe `evaluation/harness` bridges
-adapter-loaded telemetry into deterministic-baseline inputs (per-signal scale floor;
-signal→service by the final underscore), scores Top-1/Top-3/MRR/abstention/invalid-evidence,
-and runs a deterministic baseline arm and a verifier-gated Gemini arm; `scripts/run_evaluation.py`
-emits aggregate, label-free JSON under `docs/evaluation/`. The adapter gained an opt-in
-`skip_unparsable_cases` mode (the two trailing-empty-`time` RE2-OB cases). Real RE2-OB run
-(88 cases, 2 skipped): baseline Top-1 0.932 / Top-3 0.989 / MRR 0.959 / 0% abstention / 0
-invalid IDs; gemini-2.5-flash via Vertex Top-1 0.080 (0.159 answered) / 50% abstention / 0
-invalid IDs — the verifier gates the LLM's name-only guesses. The first real Gemini call also
-fixed integration defects in the adapter (client-lifetime transport close, Vertex vs
-Developer-API routing, markdown-fence unwrap, enum-vocabulary prompt) plus eval-runner
-retry/backoff and bounded concurrency; the untrusted-output parser stays strict and unchanged.
-The validator is phase-aware for Phase 7; Phases 1–6 are unchanged; no new runtime dependency.
-Hermetic gate green (ruff/format/mypy clean, unittest with PostgreSQL and Gemini-live tests
-skipped, validate full pass, `uv sync --locked`). Remaining: an independent Phase 7 review,
-then commit; a sealed RE2-TT run remains opt-in and unauthorized by default.
+Phase 8 (observability) is code-complete with the full locked hermetic gate green
+(ruff/format/mypy clean; unittest 286 tests OK with PostgreSQL and Gemini-live tests skipped;
+validator full pass). It awaits one independent review and Aswani's explicit commit approval;
+`pyproject.toml`/`uv.lock` are unchanged and the metric set carries no tenant/PII labels.
+
+Remaining v1 ship steps after the Phase 8 commit: a runnable server entrypoint wiring a shared
+registry into both the control plane and the worker under `uvicorn`, plus a Dockerfile and a
+docker-build CI gate (Step 3); one authorized sealed RE2-TT run (Step 4, opt-in and
+unauthorized by default); and the demo recording plus build-in-public posts (Step 5).
+OpenTelemetry spans and estimated cost remain deferred per the ADR 0015 cut order.

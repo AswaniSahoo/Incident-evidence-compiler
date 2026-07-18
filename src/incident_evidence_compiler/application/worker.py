@@ -37,6 +37,7 @@ from ..llm import (
     ProviderUnavailableError,
     parse_metric_hypothesis,
 )
+from ..observability import MetricsRegistry
 from ..persistence import (
     AttemptId,
     AttemptOutcome,
@@ -96,6 +97,7 @@ class Worker:
         policy: BaselinePolicy = DEFAULT_BASELINE_POLICY,
         clock: Callable[[], datetime] = _utcnow,
         id_factory: Callable[[], UUID] = uuid4,
+        metrics: MetricsRegistry | None = None,
     ) -> None:
         if not worker_id.strip():
             raise ValueError("worker_id must be non-empty")
@@ -109,6 +111,26 @@ class Worker:
         self._policy = policy
         self._clock = clock
         self._id_factory = id_factory
+        # A shared registry lets a co-located /metrics endpoint expose these; an unshared
+        # default keeps the worker fully functional when metrics are not scraped.
+        self._metrics = metrics if metrics is not None else MetricsRegistry()
+        self._jobs_total = self._metrics.counter(
+            "iec_worker_jobs_total", "Worker job outcomes.", ("outcome",)
+        )
+        self._stage_seconds = self._metrics.histogram(
+            "iec_worker_stage_duration_seconds",
+            "Per-stage worker latency in seconds.",
+            labelnames=("stage",),
+        )
+        self._provider_timeouts_total = self._metrics.counter(
+            "iec_provider_timeouts_total", "LLM provider timeouts."
+        )
+        self._llm_tokens_total = self._metrics.counter(
+            "iec_llm_tokens_total", "LLM tokens consumed.", ("kind",)
+        )
+        self._verdicts_total = self._metrics.counter(
+            "iec_investigation_verdicts_total", "Verification verdicts.", ("verdict",)
+        )
 
     async def run_once(self) -> bool:
         """Claim and process one job. Return False if the queue had no eligible job."""
@@ -129,6 +151,7 @@ class Worker:
 
             if investigation.status == InvestigationStatus.CANCELLED:
                 await uow.jobs.set_status(claimed.tenant, claimed.job_id, JobStatus.CANCELLED)
+                self._jobs_total.inc(labels=("cancelled",))
                 await uow.commit()
                 return True
 
@@ -144,26 +167,29 @@ class Worker:
             else:
                 await uow.jobs.set_status(claimed.tenant, claimed.job_id, JobStatus.SUCCEEDED)
                 await self._record_attempt(uow, claimed, started, AttemptOutcome.SUCCEEDED, None)
+                self._jobs_total.inc(labels=("succeeded",))
             await uow.commit()
             return True
 
     async def _run_pipeline(self, uow: UnitOfWork, investigation: InvestigationRecord) -> None:
         try:
-            telemetry = await self._telemetry.load(
-                investigation.tenant, investigation.incident, investigation.run
-            )
+            with self._stage_seconds.time(labels=("telemetry_load",)):
+                telemetry = await self._telemetry.load(
+                    investigation.tenant, investigation.incident, investigation.run
+                )
         except TelemetryUnavailableError:
             raise _TerminalFailure("telemetry_unavailable") from None
 
         try:
-            baseline = rank_metric_shifts(investigation.window, telemetry, self._policy)
-            ledger = compile_metric_shift_ledger(
-                investigation.tenant,
-                investigation.incident,
-                investigation.run,
-                investigation.window,
-                baseline,
-            )
+            with self._stage_seconds.time(labels=("baseline",)):
+                baseline = rank_metric_shifts(investigation.window, telemetry, self._policy)
+                ledger = compile_metric_shift_ledger(
+                    investigation.tenant,
+                    investigation.incident,
+                    investigation.run,
+                    investigation.window,
+                    baseline,
+                )
         except DomainError as exc:
             raise _TerminalFailure(exc.code) from None
 
@@ -176,14 +202,24 @@ class Worker:
         )
 
         try:
-            async with asyncio.timeout(self._deadline.total_seconds()):
-                proposal = await self._llm.propose_metric_hypotheses(request)
+            with self._stage_seconds.time(labels=("llm_propose",)):
+                async with asyncio.timeout(self._deadline.total_seconds()):
+                    proposal = await self._llm.propose_metric_hypotheses(request)
         except TimeoutError:
+            self._provider_timeouts_total.inc()
             raise _RetryableFailure("provider_timeout") from None
         except (ProviderTimeoutError, ProviderUnavailableError):
             raise _RetryableFailure("provider_unavailable") from None
         except ProviderResponseError:
             raise _TerminalFailure("provider_response_invalid") from None
+
+        # Token counts are untrusted provider metadata; only record strictly positive
+        # values so a hostile or malformed non-positive count cannot raise inside the
+        # counter and escape the worker's typed-failure contract.
+        if proposal.prompt_tokens is not None and proposal.prompt_tokens > 0:
+            self._llm_tokens_total.inc(proposal.prompt_tokens, labels=("prompt",))
+        if proposal.completion_tokens is not None and proposal.completion_tokens > 0:
+            self._llm_tokens_total.inc(proposal.completion_tokens, labels=("completion",))
 
         try:
             document = parse_metric_hypothesis(proposal.raw_json, allowed_signals=allowed)
@@ -191,7 +227,8 @@ class Worker:
             raise _TerminalFailure(exc.code) from None
 
         try:
-            verification = verify_hypothesis(document, ledger)
+            with self._stage_seconds.time(labels=("verify",)):
+                verification = verify_hypothesis(document, ledger)
             evidence_payloads = tuple(
                 (entry.evidence_id, metric_evidence_entry_json(entry)) for entry in ledger.entries
             )
@@ -199,32 +236,35 @@ class Worker:
         except DomainError as exc:
             raise _TerminalFailure(exc.code) from None
 
+        self._verdicts_total.inc(labels=(verification.verdict.value,))
+
         now = self._clock()
-        await uow.evidence.append(
-            tuple(
-                EvidenceRecord(
-                    tenant=investigation.tenant,
+        with self._stage_seconds.time(labels=("persist",)):
+            await uow.evidence.append(
+                tuple(
+                    EvidenceRecord(
+                        tenant=investigation.tenant,
+                        investigation_id=investigation.investigation_id,
+                        run=investigation.run,
+                        evidence_id=evidence_id,
+                        ledger_kind=LedgerKind.METRIC,
+                        schema_version=EVIDENCE_SCHEMA_VERSION,
+                        payload=payload,
+                        created_at=now,
+                    )
+                    for evidence_id, payload in evidence_payloads
+                )
+            )
+            await uow.reports.put(
+                ReportRecord(
                     investigation_id=investigation.investigation_id,
+                    tenant=investigation.tenant,
                     run=investigation.run,
-                    evidence_id=evidence_id,
-                    ledger_kind=LedgerKind.METRIC,
-                    schema_version=EVIDENCE_SCHEMA_VERSION,
-                    payload=payload,
+                    schema_version=VERIFICATION_SCHEMA_VERSION,
+                    payload=report_payload,
                     created_at=now,
                 )
-                for evidence_id, payload in evidence_payloads
             )
-        )
-        await uow.reports.put(
-            ReportRecord(
-                investigation_id=investigation.investigation_id,
-                tenant=investigation.tenant,
-                run=investigation.run,
-                schema_version=VERIFICATION_SCHEMA_VERSION,
-                payload=report_payload,
-                created_at=now,
-            )
-        )
         await uow.investigations.set_status(
             investigation.tenant, investigation.investigation_id, InvestigationStatus.SUCCEEDED
         )
@@ -247,6 +287,7 @@ class Worker:
             return
         await uow.jobs.set_status(claimed.tenant, claimed.job_id, JobStatus.QUEUED)
         await self._record_attempt(uow, claimed, started, AttemptOutcome.FAILED, code)
+        self._jobs_total.inc(labels=("retried",))
 
     async def _terminal_fail(
         self, uow: UnitOfWork, claimed: ClaimedJob, started: datetime, code: str
@@ -256,6 +297,7 @@ class Worker:
         )
         await uow.jobs.set_status(claimed.tenant, claimed.job_id, JobStatus.FAILED)
         await self._record_attempt(uow, claimed, started, AttemptOutcome.FAILED, code)
+        self._jobs_total.inc(labels=("failed",))
         await uow.audit.record(
             AuditRecord(
                 tenant=claimed.tenant,
