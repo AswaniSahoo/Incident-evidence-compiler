@@ -146,6 +146,18 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "src/incident_evidence_compiler/observability/metrics.py",
         "tests/test_observability.py",
     ),
+    9: (
+        "docs/decisions/0016-runnable-entrypoint-container.md",
+        "docs/devlog/0010-phase-9-runnable-entrypoint.md",
+        "Dockerfile",
+        "src/incident_evidence_compiler/__main__.py",
+        "src/incident_evidence_compiler/runtime/__init__.py",
+        "src/incident_evidence_compiler/runtime/config.py",
+        "src/incident_evidence_compiler/runtime/telemetry.py",
+        "src/incident_evidence_compiler/runtime/demo_llm.py",
+        "src/incident_evidence_compiler/runtime/server.py",
+        "tests/test_runtime.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -201,6 +213,7 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     6: PHASE1_CI_RUNS,
     7: PHASE1_CI_RUNS,
     8: PHASE1_CI_RUNS,
+    9: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -221,6 +234,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     6: PHASE1_REQUIRED_ACTIONS,
     7: PHASE1_REQUIRED_ACTIONS,
     8: PHASE1_REQUIRED_ACTIONS,
+    9: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
@@ -240,6 +254,8 @@ FORBIDDEN_PHASE0_PATHS = (
 )
 PHASE1_SCOPE_EXCEPTIONS = {"src", "pyproject.toml", "uv.lock"}
 PHASE4_SCOPE_EXCEPTIONS = {"docker-compose.yml"}
+# Phase 9 ships the runnable container image (ADR 0016).
+PHASE9_SCOPE_EXCEPTIONS = {"Dockerfile"}
 # Approved runtime dependencies and their resolved lock pins, introduced per phase.
 APPROVED_RUNTIME_DEPENDENCIES: dict[int, tuple[str, ...]] = {
     4: ("psycopg[binary]==3.3.4",),
@@ -395,6 +411,8 @@ def _validate_phase_scope(phase: int, errors: list[str]) -> None:
         forbidden -= PHASE1_SCOPE_EXCEPTIONS
     if phase >= 4:
         forbidden -= PHASE4_SCOPE_EXCEPTIONS
+    if phase >= 9:
+        forbidden -= PHASE9_SCOPE_EXCEPTIONS
     if _license_recorded():
         forbidden -= LICENSE_ARTIFACTS
     for relative in sorted(forbidden):
