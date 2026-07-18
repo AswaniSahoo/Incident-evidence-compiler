@@ -4,18 +4,19 @@ Last verified: 2026-07-18
 
 ## Current phase
 
-Phase 8 — observability (Prometheus metrics) — is implemented on branch `phase/07-real-data` with the full locked hermetic gate verified green (2026-07-18); it is pending one independent review and Aswani's explicit commit approval. Phases 0–7 are committed in this branch's history (through the Phase 7 real-data evaluation); Phase 8 adds dependency-free metrics and an open `/metrics` endpoint as part of v1 hardening.
+Phase 9 — runnable server entrypoint + container image (ADR 0016) — is implemented on branch `phase/07-real-data` with the full locked hermetic gate verified green (2026-07-18); it is pending one independent review and Aswani's explicit commit approval. Phase 8 (observability) precedes it in this working tree. Phase 9 makes the system actually runnable (`python -m incident_evidence_compiler` / `docker run`) and adds a docker-build + smoke gate to CI, with no new runtime dependency.
 
 ## Current objective
 
-Make the pipeline observable for v1 hardening (Phase 8): a dependency-free `observability`
-package exposing a thread-safe `MetricsRegistry` of counters and histograms in the Prometheus
-text exposition format (cumulative buckets with `_sum`/`_count`/`+Inf`); worker
-instrumentation of per-stage latency, job outcomes, provider-timeout rate, LLM token counts,
-and verdict distribution recorded into an injected registry with no tenant/PII labels; and an
-open `GET /metrics` route on the control plane. No new runtime dependency
-(`pyproject.toml`/`uv.lock` unchanged); the label-safety and hermetic-CI invariants are
-unchanged (ADR 0015, devlog 0009).
+Ship the last remaining v1 code slice (Phase 9, ADR 0016): a composition-root `runtime` package
+(`AppConfig.from_env`, `build_components`, `create_server_app`, `run_worker_loop`) and a
+`python -m incident_evidence_compiler` entrypoint that wires the persistence, LLM, and telemetry
+ports into a FastAPI control plane plus an in-process worker loop; a labelled non-model smoke LLM
+client and a labelled RCAEval-backed demo telemetry source so the system boots and completes the
+pipeline end-to-end with zero credentials; a multi-stage non-root `uv` container image with a
+stdlib `HEALTHCHECK`; and a shell-based docker-build + `/health` + `/metrics` smoke gate in CI.
+No new runtime dependency (`uvicorn` was approved in phase 6); there is still no production
+telemetry ingestion, documented as an explicit limitation.
 
 ## Product
 
@@ -52,9 +53,9 @@ Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29
 
 ## Validation
 
-Phase 8 uses the same locked clean-checkout gate as Phases 1–7, verified green on 2026-07-18
+Phase 9 uses the same locked clean-checkout gate as Phases 1–8, verified green on 2026-07-18
 (unittest with PostgreSQL and Gemini-live tests skipped; ruff/format/mypy clean; validator
-full pass):
+full pass), plus a container build and smoke test:
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -63,12 +64,21 @@ full pass):
 - `uv run --locked ruff format --check .`
 - `uv run --locked mypy src tests`
 - `uv run --locked python scripts/validate_project.py`
+- `docker build -t incident-evidence-compiler:ci .` then a `/health` + `/metrics` smoke run
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
 - `git diff --check`
-- One independent Phase 8 implementation review
+- One independent Phase 9 implementation review
 
 ## Accepted (recent)
 
+- The system is runnable and containerized (ADR 0016, devlog 0010): a composition-root
+  `runtime` package and `python -m incident_evidence_compiler` entrypoint wire the ports into a
+  FastAPI control plane plus an in-process lifespan worker loop; configuration is environment-only
+  and fail-fast (`AppConfig.from_env`), with a labelled non-model smoke LLM client
+  (`FirstSignalLLMClient`) and a labelled RCAEval-backed demo telemetry source
+  (`RcaevalTelemetrySource`) enabling a credential-free end-to-end boot. A multi-stage non-root
+  `uv` image health-checks `/health` with the stdlib, and a shell-based CI job builds and smoke-
+  tests it. No new runtime dependency; production telemetry ingestion remains an explicit non-goal.
 - Observability is Prometheus-only and dependency-free (ADR 0015, devlog 0009): a
   standard-library `observability` package renders the Prometheus text exposition format; the
   `Worker` records `iec_worker_jobs_total{outcome}`, `iec_worker_stage_duration_seconds{stage}`,
@@ -89,13 +99,13 @@ full pass):
 
 ## Next action
 
-Phase 8 (observability) is code-complete with the full locked hermetic gate green
-(ruff/format/mypy clean; unittest 286 tests OK with PostgreSQL and Gemini-live tests skipped;
-validator full pass). It awaits one independent review and Aswani's explicit commit approval;
-`pyproject.toml`/`uv.lock` are unchanged and the metric set carries no tenant/PII labels.
+Phase 9 (runnable entrypoint + container) is code-complete with the full locked hermetic gate
+green (ruff/format/mypy clean; unittest 304 tests OK with PostgreSQL and Gemini-live tests
+skipped; validator full pass) and the container image building and passing its `/health` +
+`/metrics` smoke test locally. It awaits one independent review and Aswani's explicit commit
+approval; `pyproject.toml`/`uv.lock` are unchanged.
 
-Remaining v1 ship steps after the Phase 8 commit: a runnable server entrypoint wiring a shared
-registry into both the control plane and the worker under `uvicorn`, plus a Dockerfile and a
-docker-build CI gate (Step 3); one authorized sealed RE2-TT run (Step 4, opt-in and
-unauthorized by default); and the demo recording plus build-in-public posts (Step 5).
-OpenTelemetry spans and estimated cost remain deferred per the ADR 0015 cut order.
+Remaining v1 ship steps after the Phase 9 commit: one authorized sealed RE2-TT run (Step 4,
+opt-in and unauthorized by default) for a single held-out number; and the demo recording plus
+build-in-public posts (Step 5). OpenTelemetry spans and estimated cost remain deferred per the
+ADR 0015 cut order. Production telemetry ingestion is out of v1 scope (ADR 0016).

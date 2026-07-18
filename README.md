@@ -15,11 +15,12 @@ temporally valid, replayable, and linked to verifiable evidence.
 
 ## Status
 
-**Phases 0–8 in progress** — a verified deterministic domain, PostgreSQL persistence with a
+**Phases 0–9 in progress** — a verified deterministic domain, PostgreSQL persistence with a
 `SKIP LOCKED` worker queue, an async LLM provider boundary, a FastAPI control plane, a
-real-data evaluation on RCAEval RE2-OB, and a dependency-free Prometheus `/metrics` endpoint.
-See [Roadmap](#roadmap) for what remains for a full v1 (OpenTelemetry spans, container CI
-gate, runnable entrypoint, sealed held-out run).
+real-data evaluation on RCAEval RE2-OB, a dependency-free Prometheus `/metrics` endpoint, and a
+runnable entrypoint (`python -m incident_evidence_compiler`) with a multi-stage container image
+and a docker-build + smoke gate in CI. See [Roadmap](#roadmap) for what remains for a full v1
+(OpenTelemetry spans, a sealed held-out run, production telemetry ingestion).
 
 ## Why this exists
 
@@ -177,9 +178,48 @@ Report response (the deterministic verification result):
 All error bodies are a flat `{"code": "<stable_code>"}` — never model text, tenant data, or
 internals.
 
-> **Note:** a production server entrypoint (wiring a live PostgreSQL `UnitOfWork` + token
-> registry + the worker loop under `uvicorn`) is not yet committed; today the app is exercised
-> in-process via `httpx.ASGITransport` in the test suite and against opt-in PostgreSQL.
+### Run the service
+
+The entrypoint (`python -m incident_evidence_compiler`, ADR 0016) wires the persistence, LLM,
+and telemetry ports selected by environment variables into the FastAPI control plane plus an
+in-process worker loop. Configuration is environment-only and **fail-fast**: any missing or
+invalid value stops startup with a stable, secret-free message.
+
+```bash
+# Credential-free local smoke: in-memory store, non-model smoke LLM, no telemetry.
+IEC_TOKENS=dev-token=tenant-a uv run --locked python -m incident_evidence_compiler
+# -> serves on 127.0.0.1:8000 (GET /health, GET /metrics)
+```
+
+```bash
+# Real end-to-end: durable PostgreSQL, Gemini via Vertex AI, RCAEval-backed demo telemetry.
+IEC_TOKENS=prod-token=tenant-a \
+IEC_PERSISTENCE=postgres IEC_DATABASE_URL=postgresql://iec@localhost/iec \
+IEC_LLM_PROVIDER=vertex IEC_GEMINI_PROJECT=<gcp-project> IEC_GEMINI_LOCATION=us-central1 \
+IEC_TELEMETRY=rcaeval IEC_RE2_ROOT=/path/to/RE2/RE2-OB \
+uv run --locked python -m incident_evidence_compiler
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `IEC_TOKENS` | — (required) | `token=tenant` pairs, comma-separated. Never logged. |
+| `IEC_PERSISTENCE` | `memory` | `memory` or `postgres` (then `IEC_DATABASE_URL` is required). |
+| `IEC_LLM_PROVIDER` | `fake` | `fake` (non-model smoke), `developer` (`GEMINI_API_KEY`), or `vertex` (`IEC_GEMINI_PROJECT`). |
+| `IEC_TELEMETRY` | `none` | `none` or `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split). |
+| `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image defaults the host to `0.0.0.0`). |
+
+Or build and run the container image (multi-stage `uv` build, non-root, stdlib healthcheck):
+
+```bash
+docker build -t incident-evidence-compiler .
+docker run --rm -p 8000:8000 -e IEC_TOKENS=dev-token=tenant-a incident-evidence-compiler
+curl -fsS http://127.0.0.1:8000/health
+```
+
+> **Scope note:** `IEC_LLM_PROVIDER=fake` is a labelled non-model smoke client and
+> `IEC_TELEMETRY=rcaeval` is a labelled demo source — there is **no production telemetry
+> ingestion** yet (see [Limitations](#limitations)). `/health` and `/metrics` are open by design
+> and should be network-restricted at deployment.
 
 ### Optional integration checks (excluded from the hermetic gate)
 
@@ -238,6 +278,8 @@ src/incident_evidence_compiler/
   llm/            # async LLMClient protocol, FakeLLMClient, untrusted parser, Gemini adapter
   application/    # framework-independent use-cases + the Worker + TelemetrySource port
   api/            # FastAPI control plane: routes, bearer auth, tenant scoping
+  observability/  # stdlib-only Prometheus registry (counters, histograms, /metrics text)
+  runtime/        # composition root: env config, wiring, worker loop, python -m entrypoint
   evaluation/
     rcaeval/      # bounded, label-safe RCAEval RE2 adapter + evaluation-only sidecar
     harness/      # baseline-input bridge, scoring, and the two-arm runner
@@ -264,9 +306,10 @@ docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, ar
 - **Metrics, but no tracing yet.** A dependency-free Prometheus `/metrics` endpoint exposes
   per-stage latency, job outcomes, provider-timeout rate, token counts, and verdict
   distribution (no tenant/PII labels). OpenTelemetry spans and estimated cost are deferred.
-- **No production entrypoint/deployment.** The control plane and worker are exercised
-  in-process and against opt-in PostgreSQL; wiring a live server + container image is future
-  work.
+- **No production telemetry ingestion.** The system is runnable (`python -m
+  incident_evidence_compiler` / container image), but the only telemetry sources are the
+  in-memory fake and a labelled RCAEval-backed **demo** source; a durable, tenant-owned
+  telemetry ledger is future work. The worker also runs in-process (single-node v1).
 - **The LLM arm is intentionally blind to metric values.** Its low localization accuracy
   reflects that design (the verifier is the source of truth), not a defect.
 - **The baseline policy is a documented default,** not a calibrated risk–coverage curve.
@@ -276,7 +319,8 @@ docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, ar
 
 - Observability: OpenTelemetry spans per stage and estimated cost (Prometheus counters and
   stage-latency histograms are already exposed at `/metrics`).
-- A runnable server entrypoint and a container build in CI.
+- Production telemetry ingestion (a durable, tenant-owned source beyond the RCAEval demo bridge)
+  and an optional separate worker process.
 - A single, authorized sealed RE2-TT run for a held-out number.
 
 ## Provenance
