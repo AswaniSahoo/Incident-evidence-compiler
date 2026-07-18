@@ -164,10 +164,18 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("app" in error for error in errors))
 
     def test_unsupported_phase_fails_closed(self) -> None:
-        self.write_context(7)
+        self.write_context(8)
         errors: list[str] = []
         self.assertIsNone(validator._current_phase(errors))
         self.assertTrue(any("unsupported project phase" in error for error in errors))
+
+    def test_phase7_governance_maps_are_registered(self) -> None:
+        required = validator.PHASE_REQUIRED_FILES[7]
+        self.assertIn("scripts/run_evaluation.py", required)
+        self.assertIn("src/incident_evidence_compiler/evaluation/harness/runner.py", required)
+        self.assertIn("docs/evaluation/re2-ob-baseline.json", required)
+        self.assertEqual(validator.EXPECTED_CI_RUNS_BY_PHASE[7], validator.PHASE1_CI_RUNS)
+        self.assertEqual(validator.REQUIRED_ACTIONS_BY_PHASE[7], validator.PHASE1_REQUIRED_ACTIONS)
 
     def test_phase1_requires_contract_files(self) -> None:
         for relative in validator.BASE_REQUIRED_FILES + validator.PHASE_REQUIRED_FILES[1]:
