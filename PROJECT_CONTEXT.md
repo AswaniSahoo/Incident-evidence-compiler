@@ -1,14 +1,19 @@
 # Project Context
 
-Last verified: 2026-07-17
+Last verified: 2026-07-18
 
 ## Current phase
 
-Phase 6 — the async control plane and worker — is in progress on branch `phase/06-control-plane` (not yet merged to `main`). Phases 0–5 are committed and published on `main`; Phase 4 (persistence) is verified against live PostgreSQL 16 and Phase 5 adds the async LLM provider boundary.
+Phase 7 — real-data integration and development evaluation — is in progress on branch `phase/07-real-data` (not yet merged to `main`). Phases 0–6 are committed in this branch's history: the deterministic domain, persistence (verified against live PostgreSQL 16), the async LLM provider boundary, and the FastAPI control plane and worker.
 
 ## Current objective
 
-Design and implement the async control plane and worker (Phase 6): a framework-independent application core (create/status/report use-cases and a `Worker` that compiles telemetry into a verified report over the persistence and LLM ports plus a `TelemetrySource`), and a FastAPI control plane with static bearer-token authentication and tenant scoping on every data route — keeping domain and application code framework-independent and CI hermetic against in-memory fakes and a deterministic LLM (no server, database, network, or credentials in the test gate).
+Integrate the real RCAEval RE2-OB split end-to-end and measure it (Phase 7): a label-safe
+`evaluation/harness` that bridges adapter-loaded telemetry into deterministic-baseline
+inputs, scores root-cause-service localization (Top-1/Top-3/MRR, abstention, invalid-evidence
+count), and runs two arms — a deterministic baseline and a verifier-gated Gemini arm — with
+committed aggregate, label-free metrics. Ground truth stays in the evaluation sidecar and
+never reaches investigation code; raw data is never committed; CI stays hermetic.
 
 ## Product
 
@@ -71,4 +76,20 @@ Phase 3 uses the same locked clean-checkout gate as Phases 1 and 2:
 
 ## Next action
 
-Phase 6 (async control plane + worker) is implemented on branch `phase/06-control-plane`. Slice 6a is the framework-independent application core (create/status/report use-cases + a `Worker` over the persistence/LLM ports and a `TelemetrySource`), with an end-to-end and a stalled-model test on the in-memory fakes. Slice 6b adds `fastapi==0.139.2` + `uvicorn[standard]==0.51.0` and a FastAPI control plane: `POST /investigations` (202 + id, `Idempotency-Key`), `GET /investigations/{id}`, `GET /investigations/{id}/report`, and an open `GET /health`. Static bearer tokens map to a tenant and every data route is authenticated and tenant-scoped; docs/OpenAPI are disabled so `/health` is the only open route; cross-tenant reads return 404 and error bodies carry only stable codes. The validator is phase-aware for Phase 6; Phases 1–5 are unchanged. Hermetic gate is green (ruff/format/mypy clean, 258 tests with the PostgreSQL and Gemini-live tests skipped, validate full pass, `uv sync --locked`). Remaining: commit Phase 6, then Phase 7 (real-data integration) per MASTER-PLAN. The worker runs against the in-memory persistence fake here; an end-to-end run over real PostgreSQL and a live Gemini call remain opt-in.
+Phase 7 (real-data integration + development evaluation) is implemented on branch
+`phase/07-real-data` (ADR 0014, devlog 0008). A label-safe `evaluation/harness` bridges
+adapter-loaded telemetry into deterministic-baseline inputs (per-signal scale floor;
+signal→service by the final underscore), scores Top-1/Top-3/MRR/abstention/invalid-evidence,
+and runs a deterministic baseline arm and a verifier-gated Gemini arm; `scripts/run_evaluation.py`
+emits aggregate, label-free JSON under `docs/evaluation/`. The adapter gained an opt-in
+`skip_unparsable_cases` mode (the two trailing-empty-`time` RE2-OB cases). Real RE2-OB run
+(88 cases, 2 skipped): baseline Top-1 0.932 / Top-3 0.989 / MRR 0.959 / 0% abstention / 0
+invalid IDs; gemini-2.5-flash via Vertex Top-1 0.080 (0.159 answered) / 50% abstention / 0
+invalid IDs — the verifier gates the LLM's name-only guesses. The first real Gemini call also
+fixed integration defects in the adapter (client-lifetime transport close, Vertex vs
+Developer-API routing, markdown-fence unwrap, enum-vocabulary prompt) plus eval-runner
+retry/backoff and bounded concurrency; the untrusted-output parser stays strict and unchanged.
+The validator is phase-aware for Phase 7; Phases 1–6 are unchanged; no new runtime dependency.
+Hermetic gate green (ruff/format/mypy clean, unittest with PostgreSQL and Gemini-live tests
+skipped, validate full pass, `uv sync --locked`). Remaining: an independent Phase 7 review,
+then commit; a sealed RE2-TT run remains opt-in and unauthorized by default.
