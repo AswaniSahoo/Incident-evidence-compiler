@@ -13,7 +13,7 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ..application import (
@@ -27,6 +27,7 @@ from ..application import (
 from ..domain.errors import DomainValidationError
 from ..domain.identifiers import IncidentId, RunId, TenantId
 from ..domain.incidents import IncidentWindow
+from ..observability import MetricsRegistry
 from ..persistence import InvestigationId, UnitOfWorkFactory
 from ..persistence.errors import InvalidPersistenceIdentifierError
 from .auth import TokenRegistry
@@ -40,7 +41,12 @@ def _investigation_id(raw: str) -> InvestigationId:
         raise HTTPException(status_code=404, detail={"code": "investigation_not_found"}) from None
 
 
-def create_app(*, uow_factory: UnitOfWorkFactory, tokens: TokenRegistry) -> FastAPI:
+def create_app(
+    *,
+    uow_factory: UnitOfWorkFactory,
+    tokens: TokenRegistry,
+    metrics: MetricsRegistry | None = None,
+) -> FastAPI:
     app = FastAPI(
         title="Incident Evidence Compiler",
         version="0.1.0",
@@ -51,6 +57,7 @@ def create_app(*, uow_factory: UnitOfWorkFactory, tokens: TokenRegistry) -> Fast
     create_investigation = CreateInvestigation(uow_factory)
     get_status = GetInvestigationStatus(uow_factory)
     get_report = GetReport(uow_factory)
+    registry = metrics if metrics is not None else MetricsRegistry()
 
     def authenticate(authorization: Annotated[str | None, Header()] = None) -> TenantId:
         prefix = "Bearer "
@@ -64,6 +71,14 @@ def create_app(*, uow_factory: UnitOfWorkFactory, tokens: TokenRegistry) -> Fast
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/metrics")
+    async def metrics_endpoint() -> PlainTextResponse:
+        # Open like /health, and deliberately free of tenant/PII labels; restrict network
+        # access to this scrape endpoint at deployment time.
+        return PlainTextResponse(
+            registry.render(), media_type="text/plain; version=0.0.4; charset=utf-8"
+        )
 
     @app.post("/investigations", status_code=202)
     async def create(

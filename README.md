@@ -15,10 +15,11 @@ temporally valid, replayable, and linked to verifiable evidence.
 
 ## Status
 
-**Phases 0–7 complete** — a verified deterministic domain, PostgreSQL persistence with a
-`SKIP LOCKED` worker queue, an async LLM provider boundary, a FastAPI control plane, and a
-real-data evaluation on RCAEval RE2-OB. See [Roadmap](#roadmap) for what remains for a full
-v1 (observability, container CI gate, sealed held-out run).
+**Phases 0–8 in progress** — a verified deterministic domain, PostgreSQL persistence with a
+`SKIP LOCKED` worker queue, an async LLM provider boundary, a FastAPI control plane, a
+real-data evaluation on RCAEval RE2-OB, and a dependency-free Prometheus `/metrics` endpoint.
+See [Roadmap](#roadmap) for what remains for a full v1 (OpenTelemetry spans, container CI
+gate, runnable entrypoint, sealed held-out run).
 
 ## Why this exists
 
@@ -129,6 +130,7 @@ to a tenant; every data route is tenant-scoped, and a cross-tenant lookup return
 | Method & path | Purpose | Success | Notable errors |
 |---|---|---|---|
 | `GET /health` | Liveness (open) | `200 {"status":"ok"}` | — |
+| `GET /metrics` | Prometheus metrics (open, no tenant/PII labels) | `200 text/plain` | — |
 | `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401 unauthorized`, `422 <code>` |
 | `GET /investigations/{id}` | Status | `200 {"investigation_id","status"}` | `401`, `404 investigation_not_found` |
 | `GET /investigations/{id}/report` | Verified report | `200 {...,"report":{...}}` | `404`, `409 report_not_ready` |
@@ -259,8 +261,9 @@ docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, ar
 
 - **Development-set evaluation only.** RE2-OB is the observable (easiest) split; RE2-TT stays
   sealed and RE2-SS reserved. No held-out accuracy is claimed.
-- **No observability yet.** OpenTelemetry spans and a Prometheus `/metrics` endpoint are
-  planned (Phase 8) and not implemented.
+- **Metrics, but no tracing yet.** A dependency-free Prometheus `/metrics` endpoint exposes
+  per-stage latency, job outcomes, provider-timeout rate, token counts, and verdict
+  distribution (no tenant/PII labels). OpenTelemetry spans and estimated cost are deferred.
 - **No production entrypoint/deployment.** The control plane and worker are exercised
   in-process and against opt-in PostgreSQL; wiring a live server + container image is future
   work.
@@ -271,9 +274,9 @@ docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, ar
 
 ## Roadmap
 
-- Phase 8 — observability: OpenTelemetry spans per stage; Prometheus counters/histograms
-  (request count, stage p50/p95, provider timeout rate, token + cost).
-- Container build in CI; a runnable server entrypoint.
+- Observability: OpenTelemetry spans per stage and estimated cost (Prometheus counters and
+  stage-latency histograms are already exposed at `/metrics`).
+- A runnable server entrypoint and a container build in CI.
 - A single, authorized sealed RE2-TT run for a held-out number.
 
 ## Provenance

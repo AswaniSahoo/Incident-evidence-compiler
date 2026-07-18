@@ -139,6 +139,13 @@ PHASE_REQUIRED_FILES: dict[int, tuple[str, ...]] = {
         "tests/test_real_data_integration.py",
         "docs/evaluation/re2-ob-baseline.json",
     ),
+    8: (
+        "docs/decisions/0015-phase-8-observability.md",
+        "docs/devlog/0009-phase-8-observability.md",
+        "src/incident_evidence_compiler/observability/__init__.py",
+        "src/incident_evidence_compiler/observability/metrics.py",
+        "tests/test_observability.py",
+    ),
 }
 REQUIRED_CONTEXT_HEADINGS = (
     "## Current phase",
@@ -193,6 +200,7 @@ EXPECTED_CI_RUNS_BY_PHASE = {
     5: PHASE1_CI_RUNS,
     6: PHASE1_CI_RUNS,
     7: PHASE1_CI_RUNS,
+    8: PHASE1_CI_RUNS,
 }
 BASE_REQUIRED_ACTIONS = frozenset(
     {
@@ -212,6 +220,7 @@ REQUIRED_ACTIONS_BY_PHASE = {
     5: PHASE1_REQUIRED_ACTIONS,
     6: PHASE1_REQUIRED_ACTIONS,
     7: PHASE1_REQUIRED_ACTIONS,
+    8: PHASE1_REQUIRED_ACTIONS,
 }
 PINNED_ACTION = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$")
 FORBIDDEN_PHASE0_PATHS = (
