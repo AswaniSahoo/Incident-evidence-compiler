@@ -39,6 +39,9 @@ from incident_evidence_compiler.evaluation.rcaeval import (
     EvaluationBatch,
     RcaevalAdapter,
     RcaevalLoadError,
+    RcaevalSplit,
+    SealedSplitPermit,
+    authorize_sealed_split,
 )
 from incident_evidence_compiler.llm import GeminiLLMClient, LLMClient
 
@@ -52,6 +55,15 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Path to an extracted split directory named RE2-<SPLIT> (outside the repo).",
     )
     parser.add_argument("--split", default="OB", help="RCAEval RE2 split (default: OB).")
+    parser.add_argument(
+        "--sealed-confirm",
+        metavar="REASON",
+        default=None,
+        help=(
+            "Explicitly authorize opening the sealed RE2-TT split, recording a non-empty "
+            'reason (required for --split TT), e.g. --sealed-confirm "final held-out eval".'
+        ),
+    )
     parser.add_argument(
         "--arm",
         default="baseline",
@@ -156,6 +168,27 @@ def _build_artifact(
     }
 
 
+def _build_sealed_permit(args: argparse.Namespace) -> SealedSplitPermit | None:
+    """Turn the CLI's sealed-split flags into a permit, or refuse.
+
+    Only the sealed RE2-TT split needs a permit; every other split loads with ``None``.
+    Opening TT demands both ``--sealed-confirm`` and a non-empty ``--sealed-reason`` so the
+    irreversible held-out run is never a silent default. The reason is recorded on the permit
+    but never reaches model context.
+    """
+    if args.split != RcaevalSplit.TT.value:
+        return None
+    reason = args.sealed_confirm
+    if not (reason and reason.strip()):
+        print(
+            'split TT is sealed: pass --sealed-confirm "<reason>" with a non-empty reason '
+            "to open it.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return authorize_sealed_split(confirmed=True, reason=reason)
+
+
 def _make_llm_client(args: argparse.Namespace) -> LLMClient:
     deadline = timedelta(seconds=args.deadline_seconds)
     if args.provider == "vertex":
@@ -183,8 +216,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     floor_policy = ScaleFloorPolicy(relative_floor_fraction=args.relative_floor_fraction)
 
+    sealed_permit = _build_sealed_permit(args)
     try:
-        batch = RcaevalAdapter().load(args.root, args.split, skip_unparsable_cases=True)
+        batch = RcaevalAdapter().load(
+            args.root,
+            args.split,
+            sealed_permit=sealed_permit,
+            skip_unparsable_cases=True,
+        )
     except RcaevalLoadError as error:
         print(f"failed to load split [{error.code}]", file=sys.stderr)
         return 1
