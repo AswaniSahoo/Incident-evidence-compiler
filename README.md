@@ -72,8 +72,8 @@ flowchart TD
     Worker -->|"persist evidence + report"| DB
     Client -->|"GET status / report"| API
 
-    classDef trusted fill:#e6f4ea,stroke:#137333;
-    classDef untrusted fill:#fce8e6,stroke:#c5221f;
+    classDef trusted fill:#d5efdd,stroke:#137333,stroke-width:2px,color:#0b3d1a;
+    classDef untrusted fill:#fbdcd8,stroke:#c5221f,stroke-width:2px,color:#611a15;
     class DOM,DB trusted;
     class LLM,TEL untrusted;
 ```
