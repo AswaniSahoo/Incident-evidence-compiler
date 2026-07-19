@@ -37,6 +37,7 @@ from incident_evidence_compiler.evaluation.rcaeval import (
     InvestigationCase,
     RcaevalAdapter,
     RcaevalSplit,
+    SealedSplitPermit,
     SidecarEntry,
 )
 from incident_evidence_compiler.llm import HypothesisRequest, LLMProposal
@@ -287,6 +288,57 @@ class ArtifactLeakageTests(unittest.TestCase):
         for canary in ("CANARYSERVICE", "CANARYFAULT", "OTHERSERVICE", "DO_NOT_LEAK_PATH"):
             with self.subTest(canary=canary):
                 self.assertNotIn(canary, rendered)
+
+
+class SealedConfirmSeamTests(unittest.TestCase):
+    """The runner opens the sealed RE2-TT split only with an explicit confirmation.
+
+    ``scripts/run_evaluation.py`` is loaded from disk (it is outside the importable
+    package) so the CLI's sealed-permit seam is exercised directly, with no data.
+    """
+
+    @staticmethod
+    def _runner() -> object:
+        import importlib.util
+
+        path = ROOT / "scripts" / "run_evaluation.py"
+        spec = importlib.util.spec_from_file_location("run_evaluation", path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_tt_split_with_confirmation_builds_a_permit(self) -> None:
+        runner = self._runner()
+        args = runner._parse_args(  # type: ignore[attr-defined]
+            [
+                "--root",
+                "/out/of/repo",
+                "--split",
+                "TT",
+                "--sealed-confirm",
+                "final held-out evaluation",
+            ]
+        )
+        self.assertIsInstance(
+            runner._build_sealed_permit(args),  # type: ignore[attr-defined]
+            SealedSplitPermit,
+        )
+
+    def test_tt_split_without_confirmation_is_denied(self) -> None:
+        runner = self._runner()
+        args = runner._parse_args(  # type: ignore[attr-defined]
+            ["--root", "/out/of/repo", "--split", "TT"]
+        )
+        with self.assertRaises(SystemExit):
+            runner._build_sealed_permit(args)  # type: ignore[attr-defined]
+
+    def test_development_split_needs_no_permit(self) -> None:
+        runner = self._runner()
+        args = runner._parse_args(  # type: ignore[attr-defined]
+            ["--root", "/out/of/repo", "--split", "OB"]
+        )
+        self.assertIsNone(runner._build_sealed_permit(args))  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":
