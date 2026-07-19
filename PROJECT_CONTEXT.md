@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-07-18
+Last verified: 2026-07-19
 
 ## Current phase
 
@@ -99,13 +99,21 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
-Phase 9 (runnable entrypoint + container) is code-complete with the full locked hermetic gate
-green (ruff/format/mypy clean; unittest 304 tests OK with PostgreSQL and Gemini-live tests
-skipped; validator full pass) and the container image building and passing its `/health` +
-`/metrics` smoke test locally. It awaits one independent review and Aswani's explicit commit
-approval; `pyproject.toml`/`uv.lock` are unchanged.
+Step 4 (sealed RE2-TT held-out run) is DONE — executed once on 2026-07-19, on branch
+`step/04-sealed-tt-eval`. A `--sealed-confirm "<reason>"` seam was added to
+`scripts/run_evaluation.py` with three tests (commit `c7823cc`, the frozen run commit); RE2-TT
+was downloaded + md5-verified + extracted outside the repo; both arms ran at `c7823cc` with the
+config identical to RE2-OB (no tuning against TT). Held-out results (90 cases, 0 skipped, 0
+invalid IDs): baseline Top-1 0.767 / Top-3 0.878 / MRR 0.833; verifier-gated Gemini Top-1 0.156
+(0.368 answered), abstains 52/90. Aggregate label-free artifacts + protocol log + README
+held-out table committed (`59209e0`). Branch not yet pushed (build-in-public push is Aswani's
+call; the project hook blocks Claude pushes).
 
-Remaining v1 ship steps after the Phase 9 commit: one authorized sealed RE2-TT run (Step 4,
-opt-in and unauthorized by default) for a single held-out number; and the demo recording plus
-build-in-public posts (Step 5). OpenTelemetry spans and estimated cost remain deferred per the
-ADR 0015 cut order. Production telemetry ingestion is out of v1 scope (ADR 0016).
+Known limitation surfaced during the run (NOT fixed, by decision): the evaluation harness loads
+the whole split into memory before scoring, so RE2-TT (~6 GB RSS for 90 cases) OOMs on low free
+RAM; the run needed ~8 GB free. Proper fix = a streaming score-one-discard-one path (added to
+the README roadmap; deferred). See memory `re2-tt-eval-oom`.
+
+Remaining v1 ship step: the demo recording plus build-in-public posts (Step 5). OpenTelemetry
+spans and estimated cost remain deferred per the ADR 0015 cut order. Production telemetry
+ingestion is out of v1 scope (ADR 0016).
