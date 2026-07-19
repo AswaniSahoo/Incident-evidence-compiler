@@ -39,9 +39,25 @@ that the verifier gates those guesses: the model abstained or got filtered half 
 produced **zero** invalid evidence citations. The LLM can be wrong without the system being
 wrong.
 
-These are development numbers. RE2-TT stays sealed and RE2-SS is reserved, so I don't claim a
-held-out result yet — see [Roadmap](#roadmap). Method notes:
-[ADR 0014](docs/decisions/0014-phase-7-real-data-evaluation.md).
+### Held-out (sealed RE2-TT)
+
+Opened once, on 2026-07-19, against a frozen configuration (commit `c7823cc`) — the same
+thresholds and model as the development run, no tuning against TT. 90 cases, 0 skipped. This is
+the [sealed-run protocol](docs/evaluation/re2-tt-sealed-protocol.md) executed exactly once;
+artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),
+[`re2-tt-gemini.json`](docs/evaluation/re2-tt-gemini.json).
+
+| Arm | Top-1 | Top-3 | MRR | Abstention | Invalid evidence IDs |
+|---|---|---|---|---|---|
+| Baseline (deterministic) | **0.767** | **0.878** | **0.833** | 0.000 | 0 |
+| + Gemini (`gemini-2.5-flash`, verified) | 0.156 (0.368 answered) | 0.156 | 0.156 | 0.578 | 0 |
+
+The held-out numbers hold the same shape as development, on a completely different system
+(train-ticket, not the dev split): the deterministic baseline localizes well (Top-1 0.77), and
+the verifier-gated Gemini arm stays conservative — it abstained on 52 of 90 cases rather than
+assert an unverified cause, and again produced **zero** invalid evidence citations. Accuracy
+drops from the dev split (harder, unseen system), which is the honest and expected direction.
+Method notes: [ADR 0014](docs/decisions/0014-phase-7-real-data-evaluation.md).
 
 ## The question I was trying to answer
 
@@ -314,8 +330,8 @@ docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, ar
 
 I'd rather list this plainly than let you find it the hard way.
 
-- **The evaluation is development-set only.** RE2-OB is the observable, easiest split. RE2-TT is
-  sealed and RE2-SS is reserved, so there's no held-out number yet.
+- **The held-out run is a single frozen pass.** RE2-TT was opened once (2026-07-19) for the
+  numbers above; RE2-SS stays reserved. The held-out result is deliberately not re-run or tuned.
 - **The LLM arm is deliberately blind to metric values.** Its low accuracy is the design working
   as intended (the verifier is the source of truth), not a bug I forgot to fix.
 - **No production telemetry ingestion.** The service runs, but its only telemetry sources are the
@@ -329,10 +345,10 @@ I'd rather list this plainly than let you find it the hard way.
 
 ## Roadmap
 
-- One authorized, frozen run against the sealed RE2-TT split for a real held-out number
-  ([protocol](docs/evaluation/re2-tt-sealed-protocol.md)).
 - Production telemetry ingestion beyond the RCAEval demo bridge, and an optional separate worker
   process.
+- Make the evaluation harness stream cases (score-one-discard-one) so the full RE2-TT split runs
+  without holding all cases in memory — the sealed run currently needs the whole split resident.
 - OpenTelemetry spans per stage and an estimated-cost metric (the Prometheus counters and latency
   histograms already ship at `/metrics`).
 

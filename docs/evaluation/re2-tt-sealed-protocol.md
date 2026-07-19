@@ -4,8 +4,10 @@ Purpose: convert the development-set result (RE2-OB) into a single **held-out** 
 sealed RE2-TT split, run exactly once against a frozen configuration. This is the last
 credibility upgrade before the resume/README can claim a held-out accuracy.
 
-Status: **NOT YET RUN.** RE2-TT stays sealed by default (ADR 0009). Nothing in this file is a
-result; it is the freeze + procedure + a log for future upgrades.
+Status: **RUN ONCE on 2026-07-19** at freeze commit `c7823cc`. RE2-TT stays sealed by default
+(ADR 0009); this single authorized pass is the reported held-out result and will not be re-run.
+Aggregate, label-free artifacts: `docs/evaluation/re2-tt-baseline.json`,
+`docs/evaluation/re2-tt-gemini.json`.
 
 ## Hard rules (do not violate)
 
@@ -36,7 +38,8 @@ Taken verbatim from the accepted RE2-OB development run so the two are comparabl
 
 Before running: record the exact `git rev-parse HEAD` here so the freeze is auditable.
 
-- Freeze commit: `________` (fill in immediately before the run)
+- Freeze commit: `c7823ccaaefb878fa9d13762ae3144ca3d67ca22` (the `--sealed-confirm` seam slice;
+  working tree clean; both arms run at this commit on 2026-07-19).
 
 ## Preconditions
 
@@ -82,12 +85,30 @@ uv run --locked python scripts/run_evaluation.py \
   the numbers are. A worse held-out number than dev is normal and is reported honestly.
 - Only then fill the resume bullet's held-out placeholder.
 
-## Results log (fill after the run)
+## Results log
+
+Overall metrics (an abstention counts as a miss, so accuracy reflects coverage). 90 cases,
+0 skipped, 0 invalid evidence IDs on both arms.
 
 | Date | Freeze commit | Arm | Top-1 | Top-3 | MRR | Abstention | Invalid IDs |
 |---|---|---|---|---|---|---|---|
-| — | — | baseline | — | — | — | — | — |
-| — | — | gemini | — | — | — | — | — |
+| 2026-07-19 | `c7823cc` | baseline | 0.766667 | 0.877778 | 0.832565 | 0.000000 | 0 |
+| 2026-07-19 | `c7823cc` | gemini | 0.155556 | 0.155556 | 0.155556 | 0.577778 | 0 |
+
+Answered-only (over the cases where the system committed to a ranking): baseline is unchanged
+(0 abstentions); gemini answered 38/90 with Top-1 0.368421, Top-3 0.368421, MRR 0.368421.
+
+Reading: the deterministic baseline localizes the held-out RE2-TT (train-ticket) faults well
+(Top-1 0.77). The verifier-gated Gemini arm is deliberately conservative — it abstains on 52/90
+cases rather than assert an unverified conclusion, and underperforms the baseline where it does
+commit. That is the fail-closed design working as intended, not a regression: on this held-out
+system the restricted-hypothesis + deterministic-verifier path trades recall for the guarantee
+that every asserted conclusion carries a passing verifier trace. No tuning was or will be done
+against TT.
+
+Note on artifact prose: the committed JSONs carry a generic `notes` string that says
+"development split"; it is boilerplate from `_build_artifact` and is not split-specific. The
+authoritative split is the machine-readable `dataset.split` field, which is `"TT"` in both files.
 
 ## Future upgrades (backlog, not part of the one held-out run)
 
