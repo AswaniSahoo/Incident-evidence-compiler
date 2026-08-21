@@ -5,12 +5,12 @@ Last verified: 2026-07-19
 ## Current phase
 
 Phase 9 (ADR 0016 — runnable entrypoint + container image) is the current accepted phase on
-`main`. On top of it, ADR 0017 — production telemetry ingestion via Prometheus — is in progress on
-branch `feat/prometheus-telemetry`. Slices 1–3 (bounded stdlib range-query client,
-series-to-signal mapper, and the `PrometheusTelemetrySource` plus the `TelemetrySource` port
-change and config wiring) are implemented with the full locked hermetic gate verified green on
-2026-08-22. Slice 4 (a bundled throwaway-Prometheus demo profile and the first live run) is not
-started, and the ADR is still `proposed`.
+`main`. On top of it, ADR 0017 — production telemetry ingestion via Prometheus — is implemented on
+branch `feat/prometheus-telemetry`. All four slices are done (bounded stdlib range-query client,
+series-to-signal mapper, `PrometheusTelemetrySource` plus the `TelemetrySource` port change and
+config wiring, and a bundled demo profile with the first live run), with the full locked hermetic
+gate verified green on 2026-08-22. The ADR is still `proposed` and awaits Aswani's accept/defer
+decision.
 
 ## Current objective
 
@@ -76,16 +76,22 @@ full pass), plus a container build and smoke test:
 
 ## Accepted (recent)
 
-- Production telemetry ingestion via Prometheus is in progress (ADR 0017, devlog 0012, slices 1–3
+- Production telemetry ingestion via Prometheus is implemented (ADR 0017, devlog 0012, slices 1–4
   on `feat/prometheus-telemetry`): a bounded standard-library `query_range` client behind an
   injected `fetch`, a series-to-signal mapper that treats non-finite samples as gaps (ADR 0010)
   and fails closed on anything the domain cannot represent, and a `PrometheusTelemetrySource`
   whose blocking `urllib` work runs off the event loop via `asyncio.to_thread` and whose every
   typed failure becomes `TelemetryUnavailableError`. `TelemetrySource.load` gained a trailing
   `window: IncidentWindow`; the two pre-indexed sources accept and ignore it. No new runtime
-  dependency. It has **never been run against a live Prometheus**, and the bundled demo profile
-  (slice 4) is not written, so the README states both limitations explicitly. PromQL selectors are
-  process-wide, so all tenants in a process see the same metrics.
+  dependency. **Verified live on 2026-08-22** against a real Prometheus (`v3.6.0`) scraping a
+  synthetic exporter via the bundled `demo` compose profile: 8 signals / 35 points ingested, the
+  baseline ranked the injected `checkout` fault first and second (20.19 and 18.24 vs ≤ 0.29 for
+  healthy signals), and the report came back `unknown`/`weak_evidence` because the non-model smoke
+  client names the lexicographically-first signal, which is flat — the verifier correctly refused
+  it. With Prometheus stopped, the investigation terminated as `failed` with no retry storm and no
+  transport detail in the logs. The data is synthetic, so this proves the ingestion path, not
+  diagnostic accuracy. PromQL selectors are process-wide, so all tenants in a process see the same
+  metrics.
 - The system is runnable and containerized (ADR 0016, devlog 0010): a composition-root
   `runtime` package and `python -m incident_evidence_compiler` entrypoint wire the ports into a
   FastAPI control plane plus an in-process lifespan worker loop; configuration is environment-only
@@ -114,16 +120,17 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
-Slice 4 of ADR 0017: bundle a throwaway Prometheus plus a synthetic anomaly exporter as an
-optional `docker-compose` profile, run one investigation end to end against it — the first time
-any of this code opens a socket — and record what breaks. Only after that does the README's
-ingestion claim lose its "never pointed at a real Prometheus" caveat. Then decide whether ADR 0017
-moves from `proposed` to `accepted`, and whether the process-wide selector limitation is closed in
-v1 or deferred.
+Aswani's decision on two points, both surfaced by the live run. First, whether ADR 0017 moves from
+`proposed` to `accepted` now that all four slices are done and verified against a real Prometheus.
+Second, whether the API should expose the baseline's ranking and not just the verified hypothesis:
+the demo's baseline localized the injected fault cleanly (scores 20.19 / 18.24 vs ≤ 0.29) but that
+ranking is invisible through HTTP, so it had to be inspected out of band. Both are now README
+limitations and roadmap items.
 
-Also open: `runtime/prometheus.py` imports `evaluation.harness.baseline_inputs` for the scale-floor
-policy (ADR 0017 item 5 sanctions it, but evaluation code in the production path is owed a refactor
-slice), and the `feat/prometheus-telemetry` branch is not pushed — build-in-public pushes remain
+Also open: whether the process-wide PromQL selector limitation is closed in v1 or deferred;
+`runtime/prometheus.py` imports `evaluation.harness.baseline_inputs` for the scale-floor policy
+(ADR 0017 item 5 sanctions it, but evaluation code in the production path is owed a refactor
+slice); and the `feat/prometheus-telemetry` branch is not pushed — build-in-public pushes remain
 Aswani's call, and automated shell pushes stay disabled.
 
 ### Earlier, still true

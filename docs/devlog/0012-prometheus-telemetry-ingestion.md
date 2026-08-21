@@ -1,8 +1,9 @@
-# Devlog 0012 — Prometheus telemetry ingestion (slices 1–3)
+# Devlog 0012 — Prometheus telemetry ingestion (slices 1–4)
 
 Status: implemented on branch `feat/prometheus-telemetry` (ADR 0017, still `proposed`). Slice 1
-landed at `4304dcf`; slices 2 and 3 are the commits this entry accompanies. Slice 4 (bundled demo
-profile + first live run) is **not** done.
+landed at `4304dcf`; slices 2 and 3 followed. Slice 4 — the bundled demo profile and the first
+live run against a real Prometheus — is **done**, executed 2026-08-22; its results are in
+sections 6 and 7.
 
 ## 1. Problem
 
@@ -63,6 +64,13 @@ now documented in the README rather than left in the source only.
   Config adds `IEC_TELEMETRY=prometheus` plus `IEC_PROM_URL`, `IEC_PROM_QUERIES`,
   `IEC_PROM_STEP_SECONDS`, `IEC_PROM_TIMEOUT_SECONDS`, and `IEC_PROM_BEARER_TOKEN`.
 
+- **Slice 4** — the bundled demo and the first live run: `scripts/demo_anomaly_exporter.py` (a
+  stdlib exporter that holds four services flat and then degrades `checkout` at a published
+  `demo_injection_unixtime`), `demo/prometheus.yml` (5s scrape), a `demo` profile in
+  `docker-compose.yml` (exporter + real Prometheus + the built image wired to
+  `IEC_TELEMETRY=prometheus`), and `scripts/demo_live_investigation.py`, which reads the exporter's
+  injection instant so the window straddles the fault exactly rather than by guesswork.
+
 ## 6. Experiment or failure scenario
 
 `IEC_PROM_QUERIES` was initially going to reuse the comma separator from `IEC_TOKENS`. That is
@@ -73,6 +81,28 @@ asserts a comma-bearing selector survives parsing intact.
 
 The blocking-I/O risk was made falsifiable rather than argued: a fetch double records
 `threading.get_ident()`, and the test asserts it differs from the event loop's thread.
+
+**The live run (2026-08-22).** `docker compose --profile demo up -d --build`, then the driver
+script. Prometheus scraped the exporter over a four-minute window straddling the injection; the
+worker range-queried it and completed the pipeline. Ingested **8 signals, 35 points each**, and
+the baseline returned a `BaselineRanking`:
+
+| Rank | Signal | Score | pre → post |
+|---|---|---|---|
+| 1 | `demo_error_ratio{service="checkout"}` | 20.19 | 0.0020 → 0.1785 |
+| 2 | `demo_request_latency_seconds{service="checkout"}` | 18.24 | 0.1009 → 0.9419 |
+| 3–8 | healthy services, both metrics | ≤ 0.29 | unchanged |
+
+The report came back `unknown` / `weak_evidence`. That is correct, not a defect:
+`FirstSignalLLMClient` names the lexicographically-first allowed signal, which here is
+`demo_error_ratio{...service="cart"}` — a flat signal scoring 0.29 against a
+`minimum_score` of 1.0 — so the verifier declined the guess. A wrong hypothesis about genuinely
+ingested data was refused.
+
+**Failure scenario, also live.** With `docker compose stop prometheus`, a submitted investigation
+terminated as `failed` after one attempt (`iec_worker_jobs_total{outcome="failed"} 1`) rather than
+retrying, and a log scan for `urllib`, `Traceback`, the upstream address, and connection-refused
+text returned nothing: the transport failure collapsed into a stable code with no leakage.
 
 ## 7. Reproducible evidence
 
@@ -89,10 +119,19 @@ uv run --locked python scripts/validate_project.py
 git diff --check
 ```
 
-Results: **332 tests, OK, 10 skipped** (PostgreSQL and live-Gemini integration tests);
+The live demo, requiring Docker (not part of the hermetic gate):
+
+```bash
+docker compose --profile demo up -d --build
+uv run --locked python scripts/demo_live_investigation.py
+docker compose --profile demo down -v
+```
+
+Results: **335 tests, OK, 10 skipped** (PostgreSQL and live-Gemini integration tests);
 `ruff check` clean; `ruff format` clean; strict `mypy` clean over 89 source files;
 `project validation passed (full)`; `git diff --check` clean. `pyproject.toml` and `uv.lock` are
-byte-identical to `main` — no new runtime dependency, as ADR 0017 requires.
+byte-identical to `main` — no new runtime dependency, as ADR 0017 requires. Docker server 29.5.3,
+`prom/prometheus:v3.6.0`.
 
 ## 8. What failed or changed
 
@@ -105,12 +144,24 @@ change and the adapter in one file and made a clean per-slice commit split impos
 to `tests/test_prometheus.py`, so the whole Prometheus surface — client, mapper, source, and its
 config contract — is tested in one module.
 
+`PrometheusClient.over_http` had been *constructed* in tests but its `urllib` path had never run,
+because every other test injects `fetch`. A loopback `http.server` on an ephemeral port now
+exercises it for real — URL construction, the bearer header, status handling — and caught nothing
+functional but did surface a `mypy` finding: `server_address[0]` is `str | bytes`, so
+interpolating it into a URL is unsafe.
+
+The live run exposed a genuine observability gap rather than a bug. The baseline ranked the faulty
+service's two signals an order of magnitude above everything else, but the HTTP API exposes only
+the verified hypothesis, so that ranking had to be inspected out of band with a throwaway script.
+The README now lists this as a limitation and the roadmap as work.
+
 ## 9. Limitations
 
-- **Never run against a live Prometheus.** Every test drives canned API bodies through an injected
-  `fetch`; nothing here has opened a socket. The README says so explicitly.
-- **No bundled demo profile yet.** Slice 4 (a throwaway Prometheus plus a synthetic exporter in
-  `docker-compose`) is not written, so the live path is not yet reproducible by a reader.
+- **Real Prometheus, synthetic numbers.** The demo proves the ingestion path, not diagnostic
+  accuracy on production telemetry. The exporter invents its data and says so in its docstring.
+- **The demo is not in CI.** It needs Docker and about three minutes, so it stays a manual,
+  opt-in run; the hermetic gate is unchanged. `EXPECTED_CI_RUNS_BY_PHASE` in the validator pins
+  the gate commands, so adding it would be a deliberate, separate change.
 - **Selectors are process-wide, not per tenant**, so one process serves one Prometheus and all its
   tenants see the same metrics.
 - **The deadline is per query, not per `load`.** A configuration with many selectors can spend
@@ -122,6 +173,7 @@ config contract — is tested in one module.
 
 ## 10. Next question
 
-Does the path actually work against a real Prometheus? Slice 4 answers it: bundle a throwaway
-Prometheus plus a synthetic exporter that injects an anomaly, run one investigation end to end,
-and record what broke. Only after that does the README's ingestion claim get to lose its caveat.
+Two, now that ingestion demonstrably works. Should the API expose the baseline's ranking, not just
+the verified hypothesis — the live run needed a throwaway script to see the thing the system is
+best at? And should the PromQL selectors become per-tenant before v1 ships, or is the process-wide
+limitation acceptable for a single-tenant-per-process deployment?
