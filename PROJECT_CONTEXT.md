@@ -4,19 +4,24 @@ Last verified: 2026-07-19
 
 ## Current phase
 
-Phase 9 — runnable server entrypoint + container image (ADR 0016) — is implemented on branch `phase/07-real-data` with the full locked hermetic gate verified green (2026-07-18); it is pending one independent review and Aswani's explicit commit approval. Phase 8 (observability) precedes it in this working tree. Phase 9 makes the system actually runnable (`python -m incident_evidence_compiler` / `docker run`) and adds a docker-build + smoke gate to CI, with no new runtime dependency.
+Phase 9 (ADR 0016 — runnable entrypoint + container image) is the current accepted phase on
+`main`. On top of it, ADR 0017 — production telemetry ingestion via Prometheus — is in progress on
+branch `feat/prometheus-telemetry`. Slices 1–3 (bounded stdlib range-query client,
+series-to-signal mapper, and the `PrometheusTelemetrySource` plus the `TelemetrySource` port
+change and config wiring) are implemented with the full locked hermetic gate verified green on
+2026-08-22. Slice 4 (a bundled throwaway-Prometheus demo profile and the first live run) is not
+started, and the ADR is still `proposed`.
 
 ## Current objective
 
-Ship the last remaining v1 code slice (Phase 9, ADR 0016): a composition-root `runtime` package
-(`AppConfig.from_env`, `build_components`, `create_server_app`, `run_worker_loop`) and a
-`python -m incident_evidence_compiler` entrypoint that wires the persistence, LLM, and telemetry
-ports into a FastAPI control plane plus an in-process worker loop; a labelled non-model smoke LLM
-client and a labelled RCAEval-backed demo telemetry source so the system boots and completes the
-pipeline end-to-end with zero credentials; a multi-stage non-root `uv` container image with a
-stdlib `HEALTHCHECK`; and a shell-based docker-build + `/health` + `/metrics` smoke gate in CI.
-No new runtime dependency (`uvicorn` was approved in phase 6); there is still no production
-telemetry ingestion, documented as an explicit limitation.
+Close the last documented v1 gap — the system had never read telemetry from a live monitoring
+system — by adding a read-only Prometheus range-query source behind the existing
+`TelemetrySource` port, standard-library only and with no new runtime dependency. The client is
+bounded in response size, series count, and points per series; it carries a per-query deadline;
+non-finite samples are dropped as gaps rather than coerced to zero (ADR 0010); and every
+transport, shape, or bound failure collapses into one typed `TelemetryUnavailableError`. The
+blocking `urllib` work runs off the event loop via `asyncio.to_thread`. What remains is the
+demo profile and the first genuine live run: nothing in this work has opened a socket.
 
 ## Product
 
@@ -71,6 +76,16 @@ full pass), plus a container build and smoke test:
 
 ## Accepted (recent)
 
+- Production telemetry ingestion via Prometheus is in progress (ADR 0017, devlog 0012, slices 1–3
+  on `feat/prometheus-telemetry`): a bounded standard-library `query_range` client behind an
+  injected `fetch`, a series-to-signal mapper that treats non-finite samples as gaps (ADR 0010)
+  and fails closed on anything the domain cannot represent, and a `PrometheusTelemetrySource`
+  whose blocking `urllib` work runs off the event loop via `asyncio.to_thread` and whose every
+  typed failure becomes `TelemetryUnavailableError`. `TelemetrySource.load` gained a trailing
+  `window: IncidentWindow`; the two pre-indexed sources accept and ignore it. No new runtime
+  dependency. It has **never been run against a live Prometheus**, and the bundled demo profile
+  (slice 4) is not written, so the README states both limitations explicitly. PromQL selectors are
+  process-wide, so all tenants in a process see the same metrics.
 - The system is runnable and containerized (ADR 0016, devlog 0010): a composition-root
   `runtime` package and `python -m incident_evidence_compiler` entrypoint wire the ports into a
   FastAPI control plane plus an in-process lifespan worker loop; configuration is environment-only
@@ -99,6 +114,20 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
+Slice 4 of ADR 0017: bundle a throwaway Prometheus plus a synthetic anomaly exporter as an
+optional `docker-compose` profile, run one investigation end to end against it — the first time
+any of this code opens a socket — and record what breaks. Only after that does the README's
+ingestion claim lose its "never pointed at a real Prometheus" caveat. Then decide whether ADR 0017
+moves from `proposed` to `accepted`, and whether the process-wide selector limitation is closed in
+v1 or deferred.
+
+Also open: `runtime/prometheus.py` imports `evaluation.harness.baseline_inputs` for the scale-floor
+policy (ADR 0017 item 5 sanctions it, but evaluation code in the production path is owed a refactor
+slice), and the `feat/prometheus-telemetry` branch is not pushed — build-in-public pushes remain
+Aswani's call, and automated shell pushes stay disabled.
+
+### Earlier, still true
+
 Step 4 (sealed RE2-TT held-out run) is DONE — executed once on 2026-07-19, on branch
 `step/04-sealed-tt-eval`. A `--sealed-confirm "<reason>"` seam was added to
 `scripts/run_evaluation.py` with three tests (commit `0a7854e`, the frozen run commit); RE2-TT
@@ -115,5 +144,4 @@ RAM; the run needed ~8 GB free. Proper fix = a streaming score-one-discard-one p
 the README roadmap; deferred). See memory `re2-tt-eval-oom`.
 
 Remaining v1 ship step: the demo recording plus build-in-public posts (Step 5). OpenTelemetry
-spans and estimated cost remain deferred per the ADR 0015 cut order. Production telemetry
-ingestion is out of v1 scope (ADR 0016).
+spans and estimated cost remain deferred per the ADR 0015 cut order.

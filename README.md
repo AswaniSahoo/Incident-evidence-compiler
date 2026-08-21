@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-304_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-322_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
@@ -82,7 +82,7 @@ flowchart TD
     API -->|"use-cases"| APP["Application core<br/>create / status / report + Worker"]
     APP -->|"UnitOfWork port"| DB[("PostgreSQL<br/>source of truth + job queue")]
     Worker["Async worker loop"] -->|"claim job (FOR UPDATE SKIP LOCKED)"| DB
-    Worker -->|"TelemetrySource port"| TEL["Telemetry adapter<br/>(RCAEval RE2, bounded)"]
+    Worker -->|"TelemetrySource port"| TEL["Telemetry adapter<br/>(Prometheus range query<br/>or RCAEval RE2, bounded)"]
     Worker -->|"LLMClient port"| LLM["Gemini adapter / FakeLLMClient<br/>(untrusted output)"]
     Worker --> DOM["Domain (stdlib only)<br/>baseline · evidence ledger · verifier"]
     Worker -->|"persist evidence + report"| DB
@@ -184,12 +184,26 @@ IEC_TELEMETRY=rcaeval IEC_RE2_ROOT=/path/to/RE2/RE2-OB \
 uv run --locked python -m incident_evidence_compiler
 ```
 
+```bash
+# Live metrics instead: range-query a Prometheus over each incident's own window.
+# Selectors are semicolon-separated, because PromQL label lists already use commas.
+IEC_TOKENS=prod-token=tenant-a \
+IEC_TELEMETRY=prometheus IEC_PROM_URL=http://prom:9090 \
+IEC_PROM_QUERIES='sum by (service) (rate(http_request_duration_seconds_sum[1m])) ; sum by (service) (rate(http_requests_total{code=~"5.."}[1m]))' \
+uv run --locked python -m incident_evidence_compiler
+```
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `IEC_TOKENS` | required | `token=tenant` pairs, comma-separated. Never logged. |
 | `IEC_PERSISTENCE` | `memory` | `memory`, or `postgres` (then `IEC_DATABASE_URL` is required). |
 | `IEC_LLM_PROVIDER` | `fake` | `fake` (non-model smoke), `developer` (`GEMINI_API_KEY`), or `vertex` (`IEC_GEMINI_PROJECT`). |
-| `IEC_TELEMETRY` | `none` | `none`, or `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split). |
+| `IEC_TELEMETRY` | `none` | `none`, `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split), or `prometheus`. |
+| `IEC_PROM_URL` | required for `prometheus` | Base URL of the Prometheus to range-query, e.g. `http://prom:9090`. |
+| `IEC_PROM_QUERIES` | required for `prometheus` | PromQL selectors, **semicolon**-separated (PromQL label lists contain commas). |
+| `IEC_PROM_STEP_SECONDS` | `30` | Range-query sample step. |
+| `IEC_PROM_TIMEOUT_SECONDS` | `30` | Per-query deadline. With several selectors, budget accordingly. |
+| `IEC_PROM_BEARER_TOKEN` | unset | Optional bearer credential. Never logged and never echoed in an error. |
 | `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image binds `0.0.0.0`). |
 
 Or run the container. It's a multi-stage uv build, runs as a non-root user, and health-checks
@@ -203,7 +217,9 @@ curl -fsS http://127.0.0.1:8000/health
 
 One thing I want to be straight about: `IEC_LLM_PROVIDER=fake` is a labelled smoke client, not a
 model, and `IEC_TELEMETRY=rcaeval` is a demo bridge over the benchmark, not a production
-ingestion path (see [what it doesn't do](#what-it-doesnt-do-yet)). `/health` and `/metrics` are
+ingestion path. `IEC_TELEMETRY=prometheus` *is* the real ingestion path, but so far it has only
+been exercised against canned API bodies in the hermetic suite — I have not yet pointed it at a
+live Prometheus (see [what it doesn't do](#what-it-doesnt-do-yet)). `/health` and `/metrics` are
 open on purpose; put them behind your network boundary when you deploy.
 
 ## HTTP API
@@ -306,7 +322,7 @@ src/incident_evidence_compiler/
   application/    # framework-independent use-cases + the Worker + TelemetrySource port
   api/            # FastAPI control plane: routes, bearer auth, tenant scoping
   observability/  # stdlib-only Prometheus registry (counters, histograms, /metrics text)
-  runtime/        # composition root: env config, wiring, worker loop, python -m entrypoint
+  runtime/        # composition root: env config, wiring, worker loop, Prometheus ingestion, entrypoint
   evaluation/
     rcaeval/      # bounded, label-safe RCAEval RE2 adapter + evaluation-only sidecar
     harness/      # baseline-input bridge, scoring, two-arm runner
@@ -334,9 +350,18 @@ I'd rather list this plainly than let you find it the hard way.
   numbers above; RE2-SS stays reserved. The held-out result is deliberately not re-run or tuned.
 - **The LLM arm is deliberately blind to metric values.** Its low accuracy is the design working
   as intended (the verifier is the source of truth), not a bug I forgot to fix.
-- **No production telemetry ingestion.** The service runs, but its only telemetry sources are the
-  in-memory fake and a demo bridge over the RCAEval benchmark. A durable, tenant-owned telemetry
-  ledger is future work. The worker also runs in-process; splitting it out is a later change.
+- **Prometheus ingestion is written, but not yet proven against a live server.** There is a
+  read-only, stdlib-only range-query path (ADR 0017): bounded response size, series count and
+  points per series, a per-query deadline, non-finite samples dropped as gaps rather than coerced
+  to zero, and every transport, shape or bound failure collapsing into one typed
+  `TelemetryUnavailableError`. It is covered by hermetic tests against canned Prometheus API
+  bodies. It has never been pointed at a real Prometheus. That first live run, and a bundled demo
+  profile to make it reproducible, are the next slice.
+- **Telemetry selectors are process-wide, not per tenant.** With `IEC_TELEMETRY=prometheus` the
+  PromQL selectors come from environment config, so every tenant a process authenticates sees the
+  same metrics. Per-tenant, per-incident queries need schema and API work, and are deferred.
+- **No durable, tenant-owned telemetry ledger.** The worker also runs in-process; splitting it out
+  is a later change.
 - **Metrics, but no tracing.** There's a dependency-free Prometheus `/metrics` endpoint (per-stage
   latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
   OpenTelemetry spans and cost estimation are deferred.
@@ -345,8 +370,9 @@ I'd rather list this plainly than let you find it the hard way.
 
 ## Roadmap
 
-- Production telemetry ingestion beyond the RCAEval demo bridge, and an optional separate worker
-  process.
+- Point the Prometheus ingestion path at a live server, bundle a demo profile so that run is
+  reproducible, and make the selectors per-tenant instead of process-wide. An optional separate
+  worker process too.
 - Make the evaluation harness stream cases (score-one-discard-one) so the full RE2-TT split runs
   without holding all cases in memory — the sealed run currently needs the whole split resident.
 - OpenTelemetry spans per stage and an estimated-cost metric (the Prometheus counters and latency
@@ -366,7 +392,7 @@ data is never committed.
 
 ## If you want to read further
 
-- [`docs/decisions/`](docs/decisions/) — the 16 ADRs, where the real design arguments are.
+- [`docs/decisions/`](docs/decisions/) — the 17 ADRs, where the real design arguments are.
 - [`docs/devlog/`](docs/devlog/) — a phase-by-phase journal with the evidence behind each claim.
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) — components and trust
   boundaries in more detail.
