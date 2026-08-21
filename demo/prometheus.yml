@@ -1,0 +1,13 @@
+# Scrape config for the throwaway demo Prometheus (ADR 0017).
+# NOT a production or deployment artifact: it scrapes one synthetic exporter that invents
+# numbers, so the real ingestion path can be exercised against a real Prometheus.
+# A 5s interval keeps a two-minute incident window well populated (~24 points per side),
+# comfortably above the baseline's minimum_points_per_window.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: demo-exporter
+    static_configs:
+      - targets: ["exporter:9101"]

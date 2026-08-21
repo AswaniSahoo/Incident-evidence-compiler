@@ -10,6 +10,8 @@ Nothing here opens a socket.
 import threading
 import unittest
 from datetime import UTC, datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
 from incident_evidence_compiler.application import TelemetryUnavailableError
 from incident_evidence_compiler.domain.baseline import SignalBaselineInput
@@ -331,6 +333,79 @@ class PrometheusConfigTests(unittest.TestCase):
             )
         )
         self.assertIsInstance(build_components(config).telemetry, PrometheusTelemetrySource)
+
+
+def _serve_canned(
+    body: bytes, status: int = 200
+) -> tuple[HTTPServer, list[tuple[str, str | None]]]:
+    """Start a loopback HTTP server on an ephemeral port, recording (path, auth) per request."""
+    seen: list[tuple[str, str | None]] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            seen.append((self.path, self.headers.get("Authorization")))
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: Any) -> None:
+            return  # keep the test output clean
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+class PrometheusOverHttpSocketTests(unittest.IsolatedAsyncioTestCase):
+    """The real ``urllib`` transport against a real socket — a loopback stub, not a Prometheus.
+
+    Every other test injects ``fetch``, so this is the only place ``over_http``'s actual HTTP
+    path runs: URL construction, the bearer header, status handling, and body reading.
+    """
+
+    def _url(self, body: bytes, status: int = 200) -> tuple[str, list[tuple[str, str | None]]]:
+        server, seen = _serve_canned(body, status)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        # Bound to 127.0.0.1 above, so only the ephemeral port has to be discovered.
+        return f"http://127.0.0.1:{server.server_address[1]}", seen
+
+    def test_query_range_over_a_live_socket_sends_the_bearer_header(self) -> None:
+        base_url, seen = self._url(_SUCCESS)
+        client = PrometheusClient.over_http(base_url, bearer_token="demo-token")
+
+        series = client.query_range(
+            "up", start=_START, end=_END, step_seconds=60, deadline=timedelta(seconds=5)
+        )
+
+        self.assertEqual(len(series), 1)
+        self.assertEqual(series[0].name, 'http_latency_seconds{service="checkout"}')
+        path, auth = seen[0]
+        self.assertIn("/api/v1/query_range?", path)
+        self.assertEqual(auth, "Bearer demo-token")
+
+    def test_non_2xx_over_a_live_socket_raises(self) -> None:
+        base_url, _ = self._url(b'{"status":"error"}', status=503)
+        client = PrometheusClient.over_http(base_url)
+        with self.assertRaises(PrometheusError):
+            client.query_range(
+                "up", start=_START, end=_END, step_seconds=60, deadline=timedelta(seconds=5)
+            )
+
+    async def test_the_source_loads_over_a_live_socket(self) -> None:
+        base_url, seen = self._url(_SUCCESS)
+        source = PrometheusTelemetrySource(
+            PrometheusClient.over_http(base_url), ("up",), step_seconds=60
+        )
+
+        inputs = await source.load(
+            TenantId("tenant-a"), IncidentId("inc-1"), RunId("run-1"), _WINDOW
+        )
+
+        self.assertEqual(len(inputs), 1)
+        self.assertEqual(len(seen), 1)
 
 
 if __name__ == "__main__":
