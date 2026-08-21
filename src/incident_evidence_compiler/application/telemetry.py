@@ -4,6 +4,9 @@ The worker needs the metric signals to analyze for a given tenant/incident/run, 
 Phase 4 schema stores none. This port abstracts that source: Phase 6 ships an in-memory
 fake for hermetic tests; a durable, RCAEval-backed source arrives in Phase 7 without
 touching the worker.
+
+``load`` also receives the investigation's ``IncidentWindow`` (ADR 0017) so a live source has
+a ``[start, end]`` range to query. Sources whose data is already indexed accept and ignore it.
 """
 
 from collections.abc import Sequence
@@ -11,6 +14,7 @@ from typing import Protocol
 
 from ..domain.baseline import SignalBaselineInput
 from ..domain.identifiers import IncidentId, RunId, TenantId
+from ..domain.incidents import IncidentWindow
 from .errors import TelemetryUnavailableError
 
 _Key = tuple[str, str, str]
@@ -18,7 +22,7 @@ _Key = tuple[str, str, str]
 
 class TelemetrySource(Protocol):
     async def load(
-        self, tenant: TenantId, incident: IncidentId, run: RunId
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
     ) -> tuple[SignalBaselineInput, ...]:
         """Return the baseline inputs for the run, or raise ``TelemetryUnavailableError``."""
         ...
@@ -40,8 +44,9 @@ class InMemoryTelemetrySource:
         self._signals[(tenant.value, incident.value, run.value)] = tuple(signals)
 
     async def load(
-        self, tenant: TenantId, incident: IncidentId, run: RunId
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
     ) -> tuple[SignalBaselineInput, ...]:
+        # ``window`` is unused: the signals are set explicitly by the test.
         try:
             return self._signals[(tenant.value, incident.value, run.value)]
         except KeyError:

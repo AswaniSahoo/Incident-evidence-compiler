@@ -57,8 +57,10 @@ class RcaevalTelemetrySource:
         return dict(self._windows)
 
     async def load(
-        self, tenant: TenantId, incident: IncidentId, run: RunId
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
     ) -> tuple[SignalBaselineInput, ...]:
+        # ``window`` is unused: each case's signals are pre-indexed from its own CSV, and the
+        # case's authoritative window is already exposed via ``available``.
         try:
             return self._inputs[incident.value]
         except KeyError:

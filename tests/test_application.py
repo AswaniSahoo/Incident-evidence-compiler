@@ -8,6 +8,7 @@ full create -> enqueue -> worker -> verified report pipeline is exercised in the
 import asyncio
 import json
 import unittest
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from incident_evidence_compiler.application import (
@@ -89,6 +90,39 @@ class _StallingLLM:
 def _with_telemetry(source: InMemoryTelemetrySource) -> InMemoryTelemetrySource:
     source.set(TenantId(_TENANT), IncidentId(_INCIDENT), RunId(_RUN), _signals())
     return source
+
+
+class _RecordingTelemetrySource:
+    """Records what the worker passes, to pin the telemetry port contract (ADR 0017)."""
+
+    def __init__(self, signals: Sequence[SignalBaselineInput]) -> None:
+        self._signals = tuple(signals)
+        self.calls: list[tuple[TenantId, IncidentId, RunId, IncidentWindow]] = []
+
+    async def load(
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
+    ) -> tuple[SignalBaselineInput, ...]:
+        self.calls.append((tenant, incident, run, window))
+        return self._signals
+
+
+class TelemetryPortContractTest(unittest.IsolatedAsyncioTestCase):
+    """A live source needs the incident window, so the worker must hand it over (ADR 0017)."""
+
+    async def test_worker_passes_the_investigation_window_to_the_source(self) -> None:
+        factory = InMemoryUnitOfWorkFactory()
+        telemetry = _RecordingTelemetrySource(_signals())
+        worker = Worker(factory, FakeLLMClient([_proposal()]), telemetry, worker_id="worker-1")
+
+        await CreateInvestigation(factory).execute(_command())
+        self.assertTrue(await worker.run_once())
+
+        self.assertEqual(len(telemetry.calls), 1)
+        tenant, incident, run, window = telemetry.calls[0]
+        self.assertEqual(tenant, TenantId(_TENANT))
+        self.assertEqual(incident, IncidentId(_INCIDENT))
+        self.assertEqual(run, RunId(_RUN))
+        self.assertEqual(window, _window())
 
 
 class ApplicationPipelineTest(unittest.IsolatedAsyncioTestCase):

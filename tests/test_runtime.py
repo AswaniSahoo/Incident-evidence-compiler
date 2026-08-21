@@ -131,10 +131,14 @@ class RcaevalTelemetrySourceTests(unittest.IsolatedAsyncioTestCase):
     async def test_load_returns_inputs_for_known_case_and_raises_for_unknown(self) -> None:
         source = RcaevalTelemetrySource(_FIXTURE_ROOT, split="OB")
         incident_key = next(key for key in source.available if "CANARY" in key)
-        inputs = await source.load(TenantId(_TENANT), IncidentId(incident_key), RunId("run-1"))
+        window = source.available[incident_key]
+        # The window is part of the port (ADR 0017); a pre-indexed source accepts and ignores it.
+        inputs = await source.load(
+            TenantId(_TENANT), IncidentId(incident_key), RunId("run-1"), window
+        )
         self.assertTrue(inputs)
         with self.assertRaises(TelemetryUnavailableError):
-            await source.load(TenantId(_TENANT), IncidentId("no-such-case"), RunId("run-1"))
+            await source.load(TenantId(_TENANT), IncidentId("no-such-case"), RunId("run-1"), window)
 
 
 def _canary_incident(source: RcaevalTelemetrySource) -> str:
