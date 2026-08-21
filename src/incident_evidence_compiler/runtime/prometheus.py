@@ -9,12 +9,22 @@ malformed body, unexpected shape, or a bound breach) raises a stable, message-fr
 maps these series onto the domain metric model.
 """
 
+import asyncio
 import json
-from collections.abc import Callable
+import math
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, fields
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlencode
+
+from ..application import TelemetryUnavailableError
+from ..domain.baseline import SignalBaselineInput
+from ..domain.errors import DomainError
+from ..domain.identifiers import IncidentId, RunId, TenantId
+from ..domain.incidents import IncidentWindow
+from ..domain.metrics import MetricPoint, MetricSignal, SignalKey
+from ..evaluation.harness.baseline_inputs import ScaleFloorPolicy, to_baseline_inputs
 
 Fetch = Callable[[str, dict[str, str], float], tuple[int, bytes]]
 
@@ -172,3 +182,103 @@ def _parse_range_response(body: bytes, limits: PrometheusLimits) -> tuple[Promet
             points.append(PrometheusPoint(at, value))
         series.append(PrometheusSeries(_series_name(metric), tuple(points)))
     return tuple(series)
+
+
+def series_to_signals(series: Iterable[PrometheusSeries]) -> tuple[MetricSignal, ...]:
+    """Map Prometheus series onto domain metric signals, dropping non-finite samples.
+
+    Prometheus renders staleness and division artefacts as ``NaN``/``±Inf``. Those samples are
+    *gaps*: the point is dropped rather than coerced to zero, and a series left with no finite
+    point is dropped entirely (ADR 0010). What is not a gap is a response the domain cannot
+    represent — an unnameable series, non-monotonic samples, or two series rendering one key
+    (which ``rank_metric_shifts`` rejects as ``DuplicateSignalError``). Those raise
+    ``PrometheusError`` so the caller fails closed rather than analyzing a repaired timeline.
+    """
+    signals: list[MetricSignal] = []
+    seen: set[str] = set()
+    for one in series:
+        finite = tuple(sample for sample in one.points if math.isfinite(sample.value))
+        if not finite:
+            continue
+        # Only an emitted signal can collide; a fully-dropped series reserves no key.
+        if one.name in seen:
+            raise PrometheusError
+        seen.add(one.name)
+        try:
+            signals.append(
+                MetricSignal(
+                    SignalKey(one.name),
+                    tuple(MetricPoint(sample.at, sample.value) for sample in finite),
+                )
+            )
+        except DomainError as error:
+            raise PrometheusError from error
+    return tuple(signals)
+
+
+class PrometheusTelemetrySource:
+    """Range-query a live Prometheus over the incident window (ADR 0017).
+
+    Read-only ingestion: every configured PromQL selector is range-queried across
+    ``[window.start, window.end]``, and the returned series become domain signals wrapped with a
+    derived scale floor, so the baseline behaves exactly as it does for any other source.
+
+    Three boundary properties matter. The ``urllib`` fetch is blocking, so ``load`` hands the
+    whole query-and-map step to a worker thread rather than stalling the worker's event loop.
+    Every typed failure — deadline, transport, non-2xx, malformed body, bound breach, or a
+    response the domain cannot represent — becomes ``TelemetryUnavailableError``, which the
+    worker already treats as a terminal, leakage-safe failure. And the deadline is *per query*,
+    so a configuration with many selectors must size it accordingly.
+
+    The selectors are process configuration, not per-incident state, so one process serves one
+    Prometheus and every tenant it authenticates sees the same telemetry. Per-incident,
+    per-tenant queries are deferred future work (ADR 0017).
+    """
+
+    def __init__(
+        self,
+        client: PrometheusClient,
+        queries: Sequence[str],
+        *,
+        step_seconds: int = 30,
+        deadline: timedelta = timedelta(seconds=30),
+        floor_policy: ScaleFloorPolicy | None = None,
+    ) -> None:
+        selectors = tuple(query.strip() for query in queries if query.strip())
+        if not selectors:
+            raise ValueError("at least one PromQL selector is required")
+        if step_seconds < 1:
+            raise ValueError("step_seconds must be strictly positive")
+        if deadline.total_seconds() <= 0.0:
+            raise ValueError("deadline must be strictly positive")
+        self._client = client
+        self._queries = selectors
+        self._step_seconds = step_seconds
+        self._deadline = deadline
+        self._floor_policy = floor_policy if floor_policy is not None else ScaleFloorPolicy()
+
+    async def load(
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
+    ) -> tuple[SignalBaselineInput, ...]:
+        # ``tenant``/``incident``/``run`` do not select data here; see the class docstring.
+        try:
+            return await asyncio.to_thread(self._load_blocking, window)
+        except (PrometheusError, DomainError):
+            raise TelemetryUnavailableError from None
+
+    def _load_blocking(self, window: IncidentWindow) -> tuple[SignalBaselineInput, ...]:
+        """Query every selector and map the result. Blocking; runs off the event loop."""
+        collected: list[PrometheusSeries] = []
+        for query in self._queries:
+            collected.extend(
+                self._client.query_range(
+                    query,
+                    start=window.start,
+                    end=window.end,
+                    step_seconds=self._step_seconds,
+                    deadline=self._deadline,
+                )
+            )
+        # Mapped once across all selectors, so two overlapping selectors that return the same
+        # series fail closed instead of yielding a duplicate signal key to the baseline.
+        return to_baseline_inputs(series_to_signals(collected), floor_policy=self._floor_policy)
