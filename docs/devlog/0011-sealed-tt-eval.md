@@ -1,7 +1,7 @@
 # Devlog 0011 — Step 4: the one sealed RE2-TT held-out run
 
-Status: executed once on 2026-07-19 on branch `step/04-sealed-tt-eval`. Freeze commit `c7823cc`;
-results commit `59209e0`. This is the reported held-out number and will not be re-run.
+Status: executed once on 2026-07-19 on branch `step/04-sealed-tt-eval`. Freeze commit `0a7854e`;
+results commit `4f84e86`. This is the reported held-out number and will not be re-run.
 
 ## Goal
 
@@ -17,7 +17,7 @@ and passes it to `RcaevalAdapter.load`; without a non-empty reason the CLI fails
 (`SystemExit`). OB/SS paths are unchanged. Three tests (written first, watched fail) assert TT is
 denied without the flag, permitted with a reason, and that development splits need no permit. The
 domain guard was already unforgeable (object-identity `_PERMIT_TOKEN` in `ids.py`); this is only
-the thin outer CLI gate. Committed as its own slice at `c7823cc`, the frozen run commit.
+the thin outer CLI gate. Committed as its own slice at `0a7854e`, the frozen run commit.
 
 ## Freeze
 

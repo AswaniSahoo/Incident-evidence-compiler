@@ -41,7 +41,7 @@ wrong.
 
 ### Held-out (sealed RE2-TT)
 
-Opened once, on 2026-07-19, against a frozen configuration (commit `c7823cc`) — the same
+Opened once, on 2026-07-19, against a frozen configuration (commit `0a7854e`) — the same
 thresholds and model as the development run, no tuning against TT. 90 cases, 0 skipped. This is
 the [sealed-run protocol](docs/evaluation/re2-tt-sealed-protocol.md) executed exactly once;
 artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),

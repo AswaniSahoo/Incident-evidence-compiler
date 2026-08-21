@@ -101,13 +101,13 @@ full pass), plus a container build and smoke test:
 
 Step 4 (sealed RE2-TT held-out run) is DONE — executed once on 2026-07-19, on branch
 `step/04-sealed-tt-eval`. A `--sealed-confirm "<reason>"` seam was added to
-`scripts/run_evaluation.py` with three tests (commit `c7823cc`, the frozen run commit); RE2-TT
-was downloaded + md5-verified + extracted outside the repo; both arms ran at `c7823cc` with the
+`scripts/run_evaluation.py` with three tests (commit `0a7854e`, the frozen run commit); RE2-TT
+was downloaded + md5-verified + extracted outside the repo; both arms ran at `0a7854e` with the
 config identical to RE2-OB (no tuning against TT). Held-out results (90 cases, 0 skipped, 0
 invalid IDs): baseline Top-1 0.767 / Top-3 0.878 / MRR 0.833; verifier-gated Gemini Top-1 0.156
 (0.368 answered), abstains 52/90. Aggregate label-free artifacts + protocol log + README
-held-out table committed (`59209e0`). Branch not yet pushed (build-in-public push is Aswani's
-call; the project hook blocks Claude pushes).
+held-out table committed (`4f84e86`). Branch not yet pushed (build-in-public push is Aswani's
+call; automated shell pushes stay disabled).
 
 Known limitation surfaced during the run (NOT fixed, by decision): the evaluation harness loads
 the whole split into memory before scoring, so RE2-TT (~6 GB RSS for 90 cases) OOMs on low free

@@ -4,7 +4,7 @@ Purpose: convert the development-set result (RE2-OB) into a single **held-out** 
 sealed RE2-TT split, run exactly once against a frozen configuration. This is the last
 credibility upgrade before the resume/README can claim a held-out accuracy.
 
-Status: **RUN ONCE on 2026-07-19** at freeze commit `c7823cc`. RE2-TT stays sealed by default
+Status: **RUN ONCE on 2026-07-19** at freeze commit `0a7854e`. RE2-TT stays sealed by default
 (ADR 0009); this single authorized pass is the reported held-out result and will not be re-run.
 Aggregate, label-free artifacts: `docs/evaluation/re2-tt-baseline.json`,
 `docs/evaluation/re2-tt-gemini.json`.
@@ -38,7 +38,7 @@ Taken verbatim from the accepted RE2-OB development run so the two are comparabl
 
 Before running: record the exact `git rev-parse HEAD` here so the freeze is auditable.
 
-- Freeze commit: `c7823ccaaefb878fa9d13762ae3144ca3d67ca22` (the `--sealed-confirm` seam slice;
+- Freeze commit: `0a7854e6111705b68693de254b6369ca51c42ad0` (the `--sealed-confirm` seam slice;
   working tree clean; both arms run at this commit on 2026-07-19).
 
 ## Preconditions
@@ -92,8 +92,8 @@ Overall metrics (an abstention counts as a miss, so accuracy reflects coverage).
 
 | Date | Freeze commit | Arm | Top-1 | Top-3 | MRR | Abstention | Invalid IDs |
 |---|---|---|---|---|---|---|---|
-| 2026-07-19 | `c7823cc` | baseline | 0.766667 | 0.877778 | 0.832565 | 0.000000 | 0 |
-| 2026-07-19 | `c7823cc` | gemini | 0.155556 | 0.155556 | 0.155556 | 0.577778 | 0 |
+| 2026-07-19 | `0a7854e` | baseline | 0.766667 | 0.877778 | 0.832565 | 0.000000 | 0 |
+| 2026-07-19 | `0a7854e` | gemini | 0.155556 | 0.155556 | 0.155556 | 0.577778 | 0 |
 
 Answered-only (over the cases where the system committed to a ranking): baseline is unchanged
 (0 abstentions); gemini answered 38/90 with Top-1 0.368421, Top-3 0.368421, MRR 0.368421.
