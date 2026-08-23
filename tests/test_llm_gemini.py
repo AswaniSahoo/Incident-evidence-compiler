@@ -142,6 +142,21 @@ class GeminiFencedResponseTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(proposal.raw_json, '{"predicates": []}')
 
 
+class GeminiDefaultModelTest(unittest.TestCase):
+    """The client's default model must not drift from the configured one (regression guard).
+
+    A retired default (e.g. ``gemini-2.0-flash``) 404s at request time but is masked whenever a
+    caller passes a model explicitly; only a caller relying on the default — like the live smoke
+    test below — is bitten. Pinning the two defaults to one value stops them diverging again.
+    """
+
+    def test_client_default_matches_the_configured_default(self) -> None:
+        from incident_evidence_compiler.llm import gemini
+        from incident_evidence_compiler.runtime import config
+
+        self.assertEqual(gemini._DEFAULT_MODEL, config._DEFAULT_MODEL)
+
+
 @unittest.skipUnless(_GEMINI_API_KEY, "requires GEMINI_API_KEY for a live Gemini smoke test")
 class GeminiLiveSmokeTest(unittest.IsolatedAsyncioTestCase):
     async def test_live_call_returns_a_proposal(self) -> None:

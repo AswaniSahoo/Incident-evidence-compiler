@@ -13,6 +13,7 @@ import os
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import timedelta
 
 from fastapi import FastAPI
 
@@ -24,6 +25,7 @@ from ..persistence import InMemoryUnitOfWorkFactory, UnitOfWorkFactory
 from ..persistence.postgres import PostgresUnitOfWorkFactory
 from .config import AppConfig, ConfigError
 from .demo_llm import FirstSignalLLMClient
+from .prometheus import PrometheusClient, PrometheusTelemetrySource
 from .telemetry import RcaevalTelemetrySource
 
 _LOGGER = logging.getLogger("incident_evidence_compiler")
@@ -66,6 +68,14 @@ def _build_telemetry(config: AppConfig) -> TelemetrySource:
     if config.telemetry == "rcaeval":
         assert config.re2_root is not None
         return RcaevalTelemetrySource(config.re2_root, split=config.re2_split)
+    if config.telemetry == "prometheus":
+        assert config.prom_url is not None  # guaranteed by AppConfig.from_env
+        return PrometheusTelemetrySource(
+            PrometheusClient.over_http(config.prom_url, bearer_token=config.prom_bearer_token),
+            config.prom_queries,
+            step_seconds=config.prom_step_seconds,
+            deadline=timedelta(seconds=config.prom_timeout_seconds),
+        )
     return InMemoryTelemetrySource()
 
 

@@ -175,7 +175,10 @@ class Worker:
         try:
             with self._stage_seconds.time(labels=("telemetry_load",)):
                 telemetry = await self._telemetry.load(
-                    investigation.tenant, investigation.incident, investigation.run
+                    investigation.tenant,
+                    investigation.incident,
+                    investigation.run,
+                    investigation.window,
                 )
         except TelemetryUnavailableError:
             raise _TerminalFailure("telemetry_unavailable") from None

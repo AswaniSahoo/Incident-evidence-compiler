@@ -4,6 +4,12 @@
 #   docker compose up -d
 #   $env:DATABASE_URL = "postgresql://iec:iec@localhost:5432/iec"
 #   uv run --locked python -m unittest tests.test_persistence_postgres -v
+#
+# The `demo` profile (ADR 0017) is separate and opt-in: a real Prometheus scraping a synthetic
+# exporter, feeding the real ingestion path. The data is invented; the ingestion is genuine.
+#   docker compose --profile demo up -d --build
+#   uv run --locked python scripts/demo_live_investigation.py
+#   docker compose --profile demo down -v
 services:
   postgres:
     image: postgres:16
@@ -18,3 +24,45 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+  # ---- demo profile: synthetic telemetry -> real Prometheus -> real ingestion ----
+  exporter:
+    profiles: ["demo"]
+    image: python:3.12-slim-bookworm
+    command: ["python", "/app/demo_anomaly_exporter.py"]
+    environment:
+      DEMO_INJECT_AFTER_SECONDS: "60"
+    volumes:
+      - ./scripts/demo_anomaly_exporter.py:/app/demo_anomaly_exporter.py:ro
+    ports:
+      - "9101:9101"
+
+  prometheus:
+    profiles: ["demo"]
+    image: prom/prometheus:v3.6.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=1h
+    volumes:
+      - ./demo/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - exporter
+
+  compiler:
+    profiles: ["demo"]
+    build: .
+    environment:
+      # Throwaway demo token. /health and /metrics stay open, as documented.
+      IEC_TOKENS: "demo-token=tenant-a"
+      IEC_TELEMETRY: "prometheus"
+      IEC_PROM_URL: "http://prometheus:9090"
+      # Semicolon-separated: PromQL label lists already use commas.
+      IEC_PROM_QUERIES: "demo_request_latency_seconds ; demo_error_ratio"
+      IEC_PROM_STEP_SECONDS: "5"
+      IEC_WORKER_IDLE_SLEEP_SECONDS: "0.5"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - prometheus

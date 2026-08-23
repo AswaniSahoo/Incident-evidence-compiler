@@ -12,9 +12,12 @@ from pathlib import Path
 
 _PERSISTENCE_CHOICES = ("memory", "postgres")
 _LLM_CHOICES = ("fake", "developer", "vertex")
-_TELEMETRY_CHOICES = ("none", "rcaeval")
+_TELEMETRY_CHOICES = ("none", "rcaeval", "prometheus")
 _DEFAULT_MODEL = "gemini-2.5-flash"
 _DEFAULT_LOCATION = "us-central1"
+# PromQL label lists contain commas, so a comma cannot separate selectors the way it does for
+# IEC_TOKENS. A semicolon has no meaning in PromQL, so it separates them unambiguously.
+_QUERY_SEPARATOR = ";"
 
 
 class ConfigError(Exception):
@@ -72,15 +75,33 @@ def _parse_bool(env: Mapping[str, str], key: str, default: bool) -> bool:
     raise ConfigError(f"{key} must be a boolean (1/0, true/false)")
 
 
-def _parse_idle_sleep(env: Mapping[str, str]) -> float:
-    raw = env.get("IEC_WORKER_IDLE_SLEEP_SECONDS", "1.0").strip()
+def _parse_positive_float(env: Mapping[str, str], key: str, default: float) -> float:
+    raw = env.get(key, str(default)).strip()
     try:
-        seconds = float(raw)
+        value = float(raw)
     except ValueError:
-        raise ConfigError("IEC_WORKER_IDLE_SLEEP_SECONDS must be a number") from None
-    if not seconds > 0.0:
-        raise ConfigError("IEC_WORKER_IDLE_SLEEP_SECONDS must be strictly positive")
-    return seconds
+        raise ConfigError(f"{key} must be a number") from None
+    if not value > 0.0:
+        raise ConfigError(f"{key} must be strictly positive")
+    return value
+
+
+def _parse_positive_int(env: Mapping[str, str], key: str, default: int) -> int:
+    raw = env.get(key, str(default)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ConfigError(f"{key} must be an integer") from None
+    if value < 1:
+        raise ConfigError(f"{key} must be strictly positive")
+    return value
+
+
+def _parse_queries(raw: str) -> tuple[str, ...]:
+    queries = tuple(part.strip() for part in raw.split(_QUERY_SEPARATOR) if part.strip())
+    if not queries:
+        raise ConfigError("IEC_PROM_QUERIES must contain at least one PromQL selector")
+    return queries
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +119,11 @@ class AppConfig:
     telemetry: str
     re2_root: Path | None
     re2_split: str
+    prom_url: str | None
+    prom_queries: tuple[str, ...]
+    prom_step_seconds: int
+    prom_timeout_seconds: float
+    prom_bearer_token: str | None
     bind_host: str
     bind_port: int
     worker_enabled: bool
@@ -120,6 +146,12 @@ class AppConfig:
         re2_root = Path(_require(env, "IEC_RE2_ROOT")) if telemetry == "rcaeval" else None
         re2_split = env.get("IEC_RE2_SPLIT", "OB").strip()
 
+        live = telemetry == "prometheus"
+        prom_url = _require(env, "IEC_PROM_URL") if live else None
+        prom_queries = _parse_queries(_require(env, "IEC_PROM_QUERIES")) if live else ()
+        # The token is read but never echoed: no ConfigError message includes a value.
+        prom_bearer_token = (env.get("IEC_PROM_BEARER_TOKEN", "").strip() or None) if live else None
+
         return cls(
             tokens=tokens,
             persistence=persistence,
@@ -132,8 +164,15 @@ class AppConfig:
             telemetry=telemetry,
             re2_root=re2_root,
             re2_split=re2_split or "OB",
+            prom_url=prom_url,
+            prom_queries=prom_queries,
+            prom_step_seconds=_parse_positive_int(env, "IEC_PROM_STEP_SECONDS", 30),
+            prom_timeout_seconds=_parse_positive_float(env, "IEC_PROM_TIMEOUT_SECONDS", 30.0),
+            prom_bearer_token=prom_bearer_token,
             bind_host=env.get("IEC_BIND_HOST", "127.0.0.1").strip() or "127.0.0.1",
             bind_port=_parse_port(env),
             worker_enabled=_parse_bool(env, "IEC_WORKER_ENABLED", True),
-            worker_idle_sleep_seconds=_parse_idle_sleep(env),
+            worker_idle_sleep_seconds=_parse_positive_float(
+                env, "IEC_WORKER_IDLE_SLEEP_SECONDS", 1.0
+            ),
         )
