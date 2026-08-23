@@ -1,7 +1,7 @@
 # 0017 — Production telemetry ingestion via Prometheus
 
-- Status: proposed
-- Date: 2026-08-20
+- Status: accepted
+- Date: 2026-08-20 (accepted 2026-08-23, implemented on `feat/prometheus-telemetry`)
 - Deciders: Aswani
 - Supersedes: none
 - Related: 0009 (guardrailed real data), 0010 (missing cells are gaps), 0013 (control plane +
