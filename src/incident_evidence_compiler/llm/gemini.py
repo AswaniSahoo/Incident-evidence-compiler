@@ -19,7 +19,7 @@ from typing import Any, Protocol, cast
 from .client import HypothesisRequest, LLMProposal
 from .errors import ProviderResponseError, ProviderTimeoutError, ProviderUnavailableError
 
-_DEFAULT_MODEL = "gemini-2.0-flash"
+_DEFAULT_MODEL = "gemini-2.5-flash"
 _DEFAULT_DEADLINE = timedelta(seconds=30)
 
 
