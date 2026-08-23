@@ -121,7 +121,7 @@ def main() -> int:
         print(f"waiting {remaining:.0f}s for Prometheus to scrape the whole window")
         time.sleep(remaining + 2.0)
 
-    incident = f"demo-{int(injection)}"
+    incident = f"payments-{int(injection)}"
     window = {"start": _iso(start), "injection": _iso(injection), "end": _iso(end)}
     investigation_id = _post_investigation(args.compiler_url, args.token, window, incident)
     print(f"investigation {investigation_id} accepted; polling for the report")
