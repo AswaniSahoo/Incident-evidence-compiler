@@ -4,27 +4,27 @@ Last verified: 2026-08-23
 
 ## Current phase
 
-Phase 9 (ADR 0016 — runnable entrypoint + container image) is the current accepted phase on
-`main`. On top of it, ADR 0017 — production telemetry ingestion via Prometheus — is implemented on
-branch `feat/prometheus-telemetry`. All four slices are done (bounded stdlib range-query client,
-series-to-signal mapper, `PrometheusTelemetrySource` plus the `TelemetrySource` port change and
-config wiring, and a bundled demo profile), with the full locked hermetic gate verified green
-(335 tests). **ADR 0017 is accepted (2026-08-23).** Two live runs are recorded: ingestion-only
-(fake client) on 2026-08-22, and a run through real **Vertex Gemini** (`gemini-2.5-flash`,
-project `iec-live-demo`) on 2026-08-23 — the verifier returned `supported` for both `checkout`
-predicates (cited evidence) and `unknown` for `payment`, exactly the intended behaviour. A latent
-divergent-default bug (the client defaulted to retired `gemini-2.0-flash`) was fixed under TDD.
+Phase 9 (ADR 0016) and ADR 0017 (production Prometheus ingestion) are **accepted and merged to
+`main`** (`bd1bb64`, PR #4). On top of that, ADR 0018 — a payment-infrastructure incident demo — is
+implemented and **accepted** on branch `feat/payment-incident-demo`: a demo-layer reskin of the ADR
+0017 profile into a bank-router deploy incident (`bank_router` faulty, `ledger_db` a deliberate
+healthy decoy), with no domain, port, or verifier change and the full locked gate green (336 tests).
+A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
+ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned
+`supported` only for `bank_router_latency_increase` (cited evidence `sha256:758e…`) and `unknown`
+for the other three, including the `ledger_db` decoy — one verified-true, three guesses withheld,
+zero false assertions. (ADR 0017's earlier `checkout` runs and the divergent-default Gemini fix are
+recorded in devlog 0012.)
 
 ## Current objective
 
-Close the last documented v1 gap — the system had never read telemetry from a live monitoring
-system — by adding a read-only Prometheus range-query source behind the existing
-`TelemetrySource` port, standard-library only and with no new runtime dependency. The client is
-bounded in response size, series count, and points per series; it carries a per-query deadline;
-non-finite samples are dropped as gaps rather than coerced to zero (ADR 0010); and every
-transport, shape, or bound failure collapses into one typed `TelemetryUnavailableError`. The
-blocking `urllib` work runs off the event loop via `asyncio.to_thread`. What remains is the
-demo profile and the first genuine live run: nothing in this work has opened a socket.
+Present IEC as a payment-infrastructure incident investigator for an evaluated, payments-shaped
+setting (the immediate driver is the Razorpay AI Buildathon, Open Track; applications close
+2026-09-05), without moving the frozen domain or faking a vendor integration. The reskin is
+confined to demo artifacts (exporter signal names, `IEC_PROM_QUERIES`, driver label, README, ADR
+0018, devlog 0013); the data stays synthetic and labelled. Remaining: exercise the Postgres
+`SKIP LOCKED` race live for recorded durability evidence, expose the baseline ranking in the report
+API (its own ADR), and record the 5-minute pitch video.
 
 ## Product
 
