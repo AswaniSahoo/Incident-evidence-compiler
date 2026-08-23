@@ -284,8 +284,16 @@ internals cross the boundary.
 
 The `demo` compose profile stands up a real Prometheus scraping a small synthetic exporter, and
 points the ingestion path at it. Everything about the plumbing is genuine — a real Prometheus, a
-real range query, the real worker and verifier. Only the *numbers* are invented: the exporter
-holds four services flat and then degrades `checkout` at a published instant.
+real range query, the real worker and verifier. Only the *numbers* are invented, and the exporter
+says so in its own docstring.
+
+The scenario is a **payment-routing incident** (ADR 0018). Four components — `bank_router`,
+`checkout`, `upi_switch`, `ledger_db` — sit flat until a published instant, when `bank_router`, as
+if a bad deploy just shipped, degrades: its latency and error ratio climb an order of magnitude
+while the rest stay healthy. `ledger_db` is a deliberate decoy — a database-shaped signal a model
+is tempted to blame. This is the shape of a fintech reliability bar (*every money action
+explainable, bounded and gated*) with IEC's twist: the model may propose, but only the verifier
+decides.
 
 ```bash
 docker compose --profile demo up -d --build
@@ -297,31 +305,29 @@ The driver reads the exporter's own `demo_injection_unixtime` so the incident wi
 fault exactly instead of by guesswork, waits for Prometheus to scrape both sides, then submits one
 investigation and polls for the verified report.
 
-What the run actually produced (2026-08-22, 8 signals ingested, 35 points each):
+**With a real model (2026-08-23).** Run with `IEC_LLM_PROVIDER=vertex` (`gemini-2.5-flash` on a
+dedicated GCP project, ADC only — no credential in any container). Gemini, which sees only signal
+*names* and never a single value, proposed a four-predicate hypothesis
+(`payment_transaction_degradation`) casting a wide net across the payment surface. The verifier
+resolved each predicate against the live data:
 
-| Rank | Signal | Suspicion score | pre → post |
-|---|---|---|---|
-| 1 | `demo_error_ratio{service="checkout"}` | **20.19** | 0.0020 → 0.1785 |
-| 2 | `demo_request_latency_seconds{service="checkout"}` | **18.24** | 0.1009 → 0.9419 |
-| 3–8 | the three healthy services, both metrics | ≤ 0.29 | unchanged |
+| Predicate Gemini proposed | Verdict | Grounds |
+|---|---|---|
+| `bank_router_latency_increase` | **`supported`** | cited evidence `sha256:758e…` — the real injected fault |
+| `checkout_error_increase` | **`unknown`** | `weak_evidence` — checkout never moved |
+| `ledger_db_error_increase` | **`unknown`** | `weak_evidence` — the decoy; the model reached for the database, the data didn't |
+| `upi_switch_latency_increase` | **`unknown`** | `weak_evidence` — never moved |
 
-The deterministic baseline localized the injected fault cleanly — both of `checkout`'s signals, an
-order of magnitude above everything else. The **report** came back `unknown`, and that is the
-honest and correct outcome: `IEC_LLM_PROVIDER=fake` is a smoke client that names the
-lexicographically-first allowed signal, which here is a *flat* one (`cart`'s error ratio, score
-0.29), so the verifier declined it as `weak_evidence` rather than endorsing a guess. A wrong
-hypothesis about real ingested data got refused. That is the whole thesis in one run.
+**One verified-true, three guesses withheld, zero false assertions.** The model over-reached four
+ways; the verifier endorsed only the single claim real evidence supported — including refusing the
+tempting `ledger_db` decoy. That is the whole thesis in one report: the LLM is allowed to guess,
+only deterministic code is allowed to decide, and being wrong three times out of four costs nothing
+because none of it became a conclusion.
 
-**With a real model (2026-08-23).** Repeating the run with `IEC_LLM_PROVIDER=vertex`
-(`gemini-2.5-flash` on a dedicated GCP project, ADC only — no credential in any container):
-Gemini, which sees only signal *names* and cannot see a single value, proposed a hypothesis over
-`checkout` (error and latency) and `payment` (error). The verifier checked each against the live
-data and returned **`supported`** for both `checkout` predicates — each citing a content-addressed
-evidence ID — and **`unknown`** (`weak_evidence`) for `payment`, which never degraded. Two
-verified-true, one withheld, zero false assertions. Naming `checkout` is a *plausible guess*, not a
-diagnosis — the four services are named symmetrically, so the model is guessing toward
-critical-sounding names; the **verifier** is what grounds every assertion in real evidence and
-withholds the rest. The LLM can be wrong about `payment` without the system being wrong.
+**Without a model at all.** The same run with `IEC_LLM_PROVIDER=fake` (a smoke client needing no
+API, which names the lexicographically-first ingested signal — here `bank_router`'s error ratio)
+returned **`supported`** citing `sha256:8a99…` — proof the ingestion path carries real evidence end
+to end without any provider.
 
 Pulling the plug is also covered: with Prometheus stopped, an investigation terminates as `failed`
 with no retry storm, and nothing about the transport reaches the logs.
