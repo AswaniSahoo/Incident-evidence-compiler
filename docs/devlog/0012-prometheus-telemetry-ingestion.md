@@ -1,9 +1,9 @@
 # Devlog 0012 — Prometheus telemetry ingestion (slices 1–4)
 
-Status: implemented on branch `feat/prometheus-telemetry` (ADR 0017, still `proposed`). Slice 1
-landed at `4304dcf`; slices 2 and 3 followed. Slice 4 — the bundled demo profile and the first
-live run against a real Prometheus — is **done**, executed 2026-08-22; its results are in
-sections 6 and 7.
+Status: implemented on branch `feat/prometheus-telemetry` (ADR 0017, **accepted**). Slice 1
+landed at `4304dcf`; slices 2 and 3 followed. Slice 4 — the bundled demo profile and the live run
+against a real Prometheus — is **done**: an ingestion-only run (fake client) on 2026-08-22, and a
+run through real **Vertex Gemini** on 2026-08-23. Both are in sections 6 and 7.
 
 ## 1. Problem
 
@@ -103,6 +103,25 @@ ingested data was refused.
 terminated as `failed` after one attempt (`iec_worker_jobs_total{outcome="failed"} 1`) rather than
 retrying, and a log scan for `urllib`, `Traceback`, the upstream address, and connection-refused
 text returned nothing: the transport failure collapsed into a stable code with no leakage.
+
+**The live run with a real model (2026-08-23).** Re-run with `IEC_LLM_PROVIDER=vertex` (project
+`iec-live-demo`, `gemini-2.5-flash`, `us-central1`) instead of the fake client. Isolation held: the
+compiler ran as a host process against the containerized Prometheus so ADC sufficed with no
+credential mounted into any image, and another project's ambient `GOOGLE_*`/`GEMINI_API_KEY` were
+stripped from the child. The real Vertex call
+(`.../projects/iec-live-demo/.../gemini-2.5-flash:generateContent → 200`, 520 prompt + 288
+completion tokens) proposed hypothesis `major_service_impact` over three predicates. The verifier
+resolved each against the ingested ledger: `checkout_error_increase` and `checkout_latency_increase`
+came back **`supported`** (evidence `sha256:b598…`, `sha256:7adb…`); `payment_error_increase` came
+back **`unknown`/`weak_evidence`**. Counters: `iec_investigation_verdicts_total{verdict="supported"}
+1`, `iec_worker_jobs_total{outcome="succeeded"} 1`, `iec_provider_timeouts_total 0`.
+
+The honest reading matters more than the verdict. Gemini sees only signal *names*, so naming
+`checkout` (and `payment`) is a plausible guess toward critical-sounding services, not a data-driven
+diagnosis. The injected fault was `checkout`, so the two `supported` predicates are verified true and
+the `payment` guess is correctly withheld. The verifier — not the model — is the source of truth:
+this run shows it endorsing only what the live telemetry supports and withholding an unverified
+guess, the same guarantee the 2026-08-22 fake-client run showed from the refusal side.
 
 ## 7. Reproducible evidence
 

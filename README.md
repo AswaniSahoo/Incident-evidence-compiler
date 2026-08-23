@@ -312,6 +312,17 @@ lexicographically-first allowed signal, which here is a *flat* one (`cart`'s err
 0.29), so the verifier declined it as `weak_evidence` rather than endorsing a guess. A wrong
 hypothesis about real ingested data got refused. That is the whole thesis in one run.
 
+**With a real model (2026-08-23).** Repeating the run with `IEC_LLM_PROVIDER=vertex`
+(`gemini-2.5-flash` on a dedicated GCP project, ADC only — no credential in any container):
+Gemini, which sees only signal *names* and cannot see a single value, proposed a hypothesis over
+`checkout` (error and latency) and `payment` (error). The verifier checked each against the live
+data and returned **`supported`** for both `checkout` predicates — each citing a content-addressed
+evidence ID — and **`unknown`** (`weak_evidence`) for `payment`, which never degraded. Two
+verified-true, one withheld, zero false assertions. Naming `checkout` is a *plausible guess*, not a
+diagnosis — the four services are named symmetrically, so the model is guessing toward
+critical-sounding names; the **verifier** is what grounds every assertion in real evidence and
+withholds the rest. The LLM can be wrong about `payment` without the system being wrong.
+
 Pulling the plug is also covered: with Prometheus stopped, an investigation terminates as `failed`
 with no retry storm, and nothing about the transport reaches the logs.
 
