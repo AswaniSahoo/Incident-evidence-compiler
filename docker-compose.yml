@@ -59,7 +59,7 @@ services:
       IEC_TELEMETRY: "prometheus"
       IEC_PROM_URL: "http://prometheus:9090"
       # Semicolon-separated: PromQL label lists already use commas.
-      IEC_PROM_QUERIES: "demo_request_latency_seconds ; demo_error_ratio"
+      IEC_PROM_QUERIES: "payment_latency_seconds ; payment_error_ratio"
       IEC_PROM_STEP_SECONDS: "5"
       IEC_WORKER_IDLE_SLEEP_SECONDS: "0.5"
     ports:
