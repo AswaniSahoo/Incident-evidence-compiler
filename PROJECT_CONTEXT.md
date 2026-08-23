@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-07-19
+Last verified: 2026-08-23
 
 ## Current phase
 
@@ -8,9 +8,12 @@ Phase 9 (ADR 0016 — runnable entrypoint + container image) is the current acce
 `main`. On top of it, ADR 0017 — production telemetry ingestion via Prometheus — is implemented on
 branch `feat/prometheus-telemetry`. All four slices are done (bounded stdlib range-query client,
 series-to-signal mapper, `PrometheusTelemetrySource` plus the `TelemetrySource` port change and
-config wiring, and a bundled demo profile with the first live run), with the full locked hermetic
-gate verified green on 2026-08-22. The ADR is still `proposed` and awaits Aswani's accept/defer
-decision.
+config wiring, and a bundled demo profile), with the full locked hermetic gate verified green
+(335 tests). **ADR 0017 is accepted (2026-08-23).** Two live runs are recorded: ingestion-only
+(fake client) on 2026-08-22, and a run through real **Vertex Gemini** (`gemini-2.5-flash`,
+project `iec-live-demo`) on 2026-08-23 — the verifier returned `supported` for both `checkout`
+predicates (cited evidence) and `unknown` for `payment`, exactly the intended behaviour. A latent
+divergent-default bug (the client defaulted to retired `gemini-2.0-flash`) was fixed under TDD.
 
 ## Current objective
 
@@ -120,18 +123,18 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
-Aswani's decision on two points, both surfaced by the live run. First, whether ADR 0017 moves from
-`proposed` to `accepted` now that all four slices are done and verified against a real Prometheus.
-Second, whether the API should expose the baseline's ranking and not just the verified hypothesis:
-the demo's baseline localized the injected fault cleanly (scores 20.19 / 18.24 vs ≤ 0.29) but that
-ranking is invisible through HTTP, so it had to be inspected out of band. Both are now README
-limitations and roadmap items.
+Merge `feat/prometheus-telemetry` → `main` (PR, build-in-public) and push — Aswani runs the push
+(automated shell pushes stay disabled). Then the immediate goal is the **Razorpay AI Buildathon**
+(Open Track): the repo, ADRs, sealed held-out metrics, and the live Vertex run already satisfy the
+"public repo + architecture docs + honest metrics + working, not prototype" bar; the one net-new
+artifact is a **5-minute pitch video**. Positioning notes: `docs/learning/razorpay-buildathon.md`
+(private).
 
-Also open: whether the process-wide PromQL selector limitation is closed in v1 or deferred;
-`runtime/prometheus.py` imports `evaluation.harness.baseline_inputs` for the scale-floor policy
-(ADR 0017 item 5 sanctions it, but evaluation code in the production path is owed a refactor
-slice); and the `feat/prometheus-telemetry` branch is not pushed — build-in-public pushes remain
-Aswani's call, and automated shell pushes stay disabled.
+Deferred (README roadmap / backlog, not blockers): exposing the baseline ranking through HTTP (the
+demo localized the fault cleanly but that ranking is invisible over the API); process-wide vs
+per-tenant PromQL selectors; and a refactor so the production path stops importing
+`evaluation.harness.baseline_inputs` for the scale-floor policy (ADR 0017 item 5 sanctions the
+current import).
 
 ### Earlier, still true
 
