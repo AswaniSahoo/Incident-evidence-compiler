@@ -345,6 +345,10 @@ uv run --locked python -m unittest tests.test_persistence_postgres
 GEMINI_API_KEY=… uv run --locked python -m unittest tests.test_llm_gemini
 ```
 
+The PostgreSQL suite was last verified green on 2026-08-23 — **8 tests against `postgres:16`**,
+including the two-worker `FOR UPDATE SKIP LOCKED` race (`test_two_workers_claim_each_job_exactly_once`).
+See [devlog 0014](docs/devlog/0014-postgres-skip-locked-evidence.md).
+
 ## Reproduce the evaluation
 
 The RCAEval RE2 data is never committed and lives outside the repo (ADR 0009). Point the loader
