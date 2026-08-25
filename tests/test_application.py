@@ -140,6 +140,10 @@ class ApplicationPipelineTest(unittest.IsolatedAsyncioTestCase):
         report = await GetReport(factory).execute(TenantId(_TENANT), investigation_id)
         self.assertTrue(report.payload.strip())
         self.assertIsInstance(json.loads(report.payload), dict)
+        assert report.baseline_payload is not None
+        self.assertEqual(
+            json.loads(report.baseline_payload)["schema_version"], "baseline-ranking.v1"
+        )
 
         async with factory() as uow:
             evidence = await uow.evidence.list_for_investigation(

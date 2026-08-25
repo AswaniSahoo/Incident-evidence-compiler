@@ -22,6 +22,7 @@ from ..domain import (
     VERIFICATION_SCHEMA_VERSION,
     BaselinePolicy,
     DomainError,
+    baseline_ranking_json,
     compile_metric_shift_ledger,
     metric_evidence_entry_json,
     rank_metric_shifts,
@@ -236,6 +237,7 @@ class Worker:
                 (entry.evidence_id, metric_evidence_entry_json(entry)) for entry in ledger.entries
             )
             report_payload = verification_json(verification)
+            baseline_payload = baseline_ranking_json(baseline)
         except DomainError as exc:
             raise _TerminalFailure(exc.code) from None
 
@@ -266,6 +268,7 @@ class Worker:
                     schema_version=VERIFICATION_SCHEMA_VERSION,
                     payload=report_payload,
                     created_at=now,
+                    baseline_payload=baseline_payload,
                 )
             )
         await uow.investigations.set_status(
