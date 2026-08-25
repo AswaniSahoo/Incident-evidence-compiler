@@ -124,6 +124,7 @@ class ControlPlaneTest(unittest.IsolatedAsyncioTestCase):
             report = await client.get(f"/investigations/{investigation_id}/report", headers=headers)
         self.assertEqual(report.status_code, 200)
         self.assertIsInstance(report.json()["report"], dict)
+        self.assertEqual(report.json()["baseline_ranking"]["schema_version"], "baseline-ranking.v1")
 
     async def test_idempotency_key_returns_same_investigation(self) -> None:
         headers = {"Authorization": "Bearer tok-a", "Idempotency-Key": "idem-1"}

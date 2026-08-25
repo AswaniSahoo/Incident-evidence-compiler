@@ -122,6 +122,9 @@ def create_app(
             "investigation_id": str(record.investigation_id.value),
             "schema_version": record.schema_version,
             "report": json.loads(record.payload),
+            "baseline_ranking": (
+                json.loads(record.baseline_payload) if record.baseline_payload is not None else None
+            ),
         }
 
     @app.exception_handler(InvestigationNotFoundError)
