@@ -227,11 +227,13 @@ class ReportRecord:
     schema_version: str
     payload: str
     created_at: datetime
+    baseline_payload: str | None = None
 
     def __post_init__(self) -> None:
         _check_text(self.schema_version)
         _check_text(self.payload)
         _check_aware(self.created_at)
+        _check_optional_text(self.baseline_payload)
 
 
 @dataclass(frozen=True, slots=True)

@@ -439,6 +439,26 @@ class ReportRepositoryTest(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RecordNotFoundError):
                 await uow.reports.get(TenantId("tenant-b"), investigation.investigation_id)
 
+    async def test_round_trip_preserves_baseline_payload(self) -> None:
+        factory = InMemoryUnitOfWorkFactory()
+        investigation = _investigation()
+        report = ReportRecord(
+            investigation_id=investigation.investigation_id,
+            tenant=investigation.tenant,
+            run=investigation.run,
+            schema_version="verification.v1",
+            payload='{"verdict":"UNKNOWN"}',
+            created_at=_MOMENT,
+            baseline_payload='{"kind":"ranking"}',
+        )
+        async with factory() as uow:
+            await uow.reports.put(report)
+            await uow.commit()
+        async with factory() as uow:
+            stored = await uow.reports.get(report.tenant, investigation.investigation_id)
+        self.assertEqual(stored.baseline_payload, '{"kind":"ranking"}')
+        self.assertIsNone(self._report(investigation).baseline_payload)
+
 
 class AuditLogTest(unittest.IsolatedAsyncioTestCase):
     async def test_append_and_list_for_investigation(self) -> None:

@@ -214,12 +214,15 @@ class PostgresPersistenceTest(unittest.IsolatedAsyncioTestCase):
             schema_version="verification.v1",
             payload='{"verdict":"UNKNOWN"}',
             created_at=_MOMENT,
+            baseline_payload='{"kind":"ranking"}',
         )
         async with self.factory() as uow:
             await uow.investigations.create(investigation)
             await uow.reports.put(report)
             await uow.commit()
         async with self.factory() as uow:
+            stored = await uow.reports.get(report.tenant, investigation.investigation_id)
+            self.assertEqual(stored.baseline_payload, '{"kind":"ranking"}')
             with self.assertRaises(IdempotencyConflictError):
                 await uow.reports.put(report)
 

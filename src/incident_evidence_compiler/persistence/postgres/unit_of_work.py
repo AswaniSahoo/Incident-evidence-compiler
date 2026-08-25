@@ -74,7 +74,9 @@ _EVIDENCE_COLS = (
     "tenant_id, investigation_id, run_id, evidence_id, ledger_kind, "
     "schema_version, payload, created_at"
 )
-_REPORT_COLS = "investigation_id, tenant_id, run_id, schema_version, payload, created_at"
+_REPORT_COLS = (
+    "investigation_id, tenant_id, run_id, schema_version, payload, created_at, baseline_payload"
+)
 _AUDIT_COLS = "tenant_id, investigation_id, actor, action, detail, occurred_at"
 
 
@@ -149,6 +151,7 @@ def _report(row: _Row) -> ReportRecord:
         schema_version=row[3],
         payload=row[4],
         created_at=row[5],
+        baseline_payload=row[6],
     )
 
 
@@ -439,12 +442,13 @@ class _ReportRepository:
             record.schema_version,
             record.payload,
             record.created_at,
+            record.baseline_payload,
         )
         try:
             async with self._connection().cursor() as cursor:
                 await cursor.execute(
                     f"INSERT INTO reports ({_REPORT_COLS}) "
-                    f"VALUES ({_placeholders(6)}) RETURNING {_REPORT_COLS}",
+                    f"VALUES ({_placeholders(7)}) RETURNING {_REPORT_COLS}",
                     params,
                 )
                 row = await cursor.fetchone()
