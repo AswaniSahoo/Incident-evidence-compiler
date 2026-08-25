@@ -1,7 +1,7 @@
 # 0019 — Expose the baseline ranking in the investigation report
 
-- Status: proposed
-- Date: 2026-08-23
+- Status: accepted
+- Date: 2026-08-23 (accepted 2026-08-23, implemented on `main`)
 - Deciders: Aswani
 - Supersedes: none
 - Related: 0002 (the baseline emits ranked suspicion or abstention, never a causal claim),

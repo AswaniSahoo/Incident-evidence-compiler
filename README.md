@@ -414,9 +414,6 @@ I'd rather list this plainly than let you find it the hard way.
 - **Telemetry selectors are process-wide, not per tenant.** With `IEC_TELEMETRY=prometheus` the
   PromQL selectors come from environment config, so every tenant a process authenticates sees the
   same metrics. Per-tenant, per-incident queries need schema and API work, and are deferred.
-- **The report exposes only the verified hypothesis, not the baseline's ranking.** The live demo
-  made this concrete: the baseline ranked the faulty service's signals first by a wide margin, but
-  nothing in the HTTP API shows that, so the ranking had to be inspected out of band.
 - **No durable, tenant-owned telemetry ledger.** The worker also runs in-process; splitting it out
   is a later change.
 - **Metrics, but no tracing.** There's a dependency-free Prometheus `/metrics` endpoint (per-stage

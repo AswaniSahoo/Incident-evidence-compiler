@@ -5,10 +5,13 @@ Last verified: 2026-08-23
 ## Current phase
 
 Phase 9 (ADR 0016) and ADR 0017 (production Prometheus ingestion) are **accepted and merged to
-`main`** (`bd1bb64`, PR #4). On top of that, ADR 0018 — a payment-infrastructure incident demo — is
-implemented and **accepted** on branch `feat/payment-incident-demo`: a demo-layer reskin of the ADR
-0017 profile into a bank-router deploy incident (`bank_router` faulty, `ledger_db` a deliberate
-healthy decoy), with no domain, port, or verifier change and the full locked gate green (336 tests).
+`main`** (`bd1bb64`, PR #4). On top of that, ADR 0018 (payment-infrastructure incident demo) and ADR 0019 (expose the baseline
+ranking as an additive nullable `baseline_ranking` field) are **accepted and merged to `main`**
+(PR #5 plus direct commits). ADR 0018 reskins the ADR 0017 profile into a bank-router deploy
+incident (`bank_router` faulty, `ledger_db` a deliberate healthy decoy) with no domain, port, or
+verifier change; ADR 0019 persists the ranking additively (migration `0002`, verification schema
+untouched). The full locked gate is green (340 tests), and the Postgres `SKIP LOCKED` durability
+suite was verified against `postgres:16` (devlog 0014).
 A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
 ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned
 `supported` only for `bank_router_latency_increase` (cited evidence `sha256:758e…`) and `unknown`
@@ -22,9 +25,9 @@ Present IEC as a payment-infrastructure incident investigator for an evaluated, 
 setting (the immediate driver is the Razorpay AI Buildathon, Open Track; applications close
 2026-09-05), without moving the frozen domain or faking a vendor integration. The reskin is
 confined to demo artifacts (exporter signal names, `IEC_PROM_QUERIES`, driver label, README, ADR
-0018, devlog 0013); the data stays synthetic and labelled. Remaining: exercise the Postgres
-`SKIP LOCKED` race live for recorded durability evidence, expose the baseline ranking in the report
-API (its own ADR), and record the 5-minute pitch video.
+0018, devlog 0013); the data stays synthetic and labelled. The durability evidence (devlog 0014)
+and the baseline-ranking API (ADR 0019, devlog 0015) are both done on `main`; the only remaining
+Buildathon item is the 5-minute pitch video.
 
 ## Product
 
