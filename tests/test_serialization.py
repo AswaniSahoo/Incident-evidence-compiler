@@ -11,6 +11,8 @@ from typing import cast
 
 from incident_evidence_compiler.domain.baseline import (
     BaselinePolicy,
+    BaselineRanking,
+    BaselineResult,
     SignalBaselineInput,
     rank_metric_shifts,
 )
@@ -49,9 +51,11 @@ from incident_evidence_compiler.domain.identifiers import EvidenceId, IncidentId
 from incident_evidence_compiler.domain.incidents import IncidentWindow
 from incident_evidence_compiler.domain.metrics import MetricPoint, MetricSignal, SignalKey
 from incident_evidence_compiler.domain.serialization import (
+    BASELINE_RANKING_SCHEMA_VERSION,
     CHANGE_VERIFICATION_SCHEMA_VERSION,
     VERIFICATION_SCHEMA_VERSION,
     CanonicalSerializationError,
+    baseline_ranking_json,
     change_ledger_json,
     change_verification_json,
     ledger_json,
@@ -790,6 +794,46 @@ class ChangeSerializationTests(unittest.TestCase):
         for canary in ("z-svc", "A-svc", "p-supported", CHANGE_TENANT.value):
             self.assertNotIn(canary, text)
         self.assertIn("predicate_count=3", text)
+
+
+class BaselineRankingSerializationTests(unittest.TestCase):
+    def test_serializes_a_ranking_with_ordered_candidates(self) -> None:
+        result = rank_metric_shifts(
+            window(),
+            (
+                baseline_input("bank_router", (0.1, 0.1), (2.0, 2.0)),
+                baseline_input("checkout", (0.1, 0.1), (0.1, 0.1)),
+            ),
+            BaselinePolicy(2, 1.0, 0.0, 0.0),
+        )
+        self.assertIsInstance(result, BaselineRanking)
+        payload = json.loads(baseline_ranking_json(result))
+        self.assertEqual(payload["schema_version"], BASELINE_RANKING_SCHEMA_VERSION)
+        self.assertEqual(payload["kind"], "ranking")
+        self.assertIsNone(payload["abstention_reason"])
+        keys = [candidate["signal_key"] for candidate in payload["candidates"]]
+        self.assertEqual(keys, ["bank_router", "checkout"])
+        self.assertEqual(payload["top_score"], payload["candidates"][0]["suspicion_score"])
+        self.assertGreater(
+            float.fromhex(payload["candidates"][0]["suspicion_score"]),
+            float.fromhex(payload["candidates"][1]["suspicion_score"]),
+        )
+
+    def test_serializes_a_weak_evidence_abstention(self) -> None:
+        result = rank_metric_shifts(
+            window(),
+            (baseline_input("bank_router", (0.1, 0.1), (0.2, 0.2)),),
+            BaselinePolicy(2, 1.0, 0.0, 0.0),
+        )
+        payload = json.loads(baseline_ranking_json(result))
+        self.assertEqual(payload["kind"], "abstention")
+        self.assertEqual(payload["abstention_reason"], "weak_evidence")
+        self.assertIsNone(payload["lead"])
+        self.assertEqual(len(payload["candidates"]), 1)
+
+    def test_rejects_a_foreign_object(self) -> None:
+        with self.assertRaises(CanonicalSerializationError):
+            baseline_ranking_json(cast(BaselineResult, object()))
 
 
 if __name__ == "__main__":

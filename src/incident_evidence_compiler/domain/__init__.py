@@ -83,8 +83,10 @@ from .identifiers import CaseId, EvidenceId, IncidentId, RunId, TenantId
 from .incidents import IncidentWindow
 from .metrics import MetricPoint, MetricSignal, SignalKey
 from .serialization import (
+    BASELINE_RANKING_SCHEMA_VERSION,
     CHANGE_VERIFICATION_SCHEMA_VERSION,
     VERIFICATION_SCHEMA_VERSION,
+    baseline_ranking_json,
     change_ledger_json,
     change_verification_json,
     ledger_json,
@@ -102,6 +104,7 @@ from .verifier import (
 )
 
 __all__ = [
+    "BASELINE_RANKING_SCHEMA_VERSION",
     "CHANGE_EVIDENCE_SCHEMA_VERSION",
     "CHANGE_VERIFICATION_SCHEMA_VERSION",
     "EVIDENCE_SCHEMA_VERSION",
@@ -170,6 +173,7 @@ __all__ = [
     "UnknownReason",
     "VerificationReason",
     "VerificationVerdict",
+    "baseline_ranking_json",
     "change_ledger_json",
     "change_verification_json",
     "compile_change_event_ledger",

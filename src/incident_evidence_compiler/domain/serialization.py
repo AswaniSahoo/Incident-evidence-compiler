@@ -8,7 +8,14 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import NoReturn, cast
 
-from .baseline import AbstentionReason, BaselinePolicy, SuspicionCandidate
+from .baseline import (
+    AbstentionReason,
+    BaselineAbstention,
+    BaselinePolicy,
+    BaselineRanking,
+    BaselineResult,
+    SuspicionCandidate,
+)
 from .change_evidence import (
     SCHEMA_VERSION as CHANGE_LEDGER_SCHEMA_VERSION,
 )
@@ -54,6 +61,7 @@ from .verifier import (
 
 VERIFICATION_SCHEMA_VERSION = "metric-hypothesis-verification.v1"
 CHANGE_VERIFICATION_SCHEMA_VERSION = "change-cooccurrence-verification.v1"
+BASELINE_RANKING_SCHEMA_VERSION = "baseline-ranking.v1"
 
 
 def _fail() -> NoReturn:
@@ -426,6 +434,41 @@ def _verification_payload(value: object) -> dict[str, object]:
     }
 
 
+def _baseline_ranking_payload(value: object) -> dict[str, object]:
+    if isinstance(value, BaselineRanking):
+        candidates = value.candidates
+        return {
+            "abstention_reason": None,
+            "candidates": [_candidate_payload(candidate) for candidate in candidates],
+            "kind": "ranking",
+            "lead": (
+                _finite_hex(value.lead, nonnegative=True) if math.isfinite(value.lead) else None
+            ),
+            "policy": _policy_payload(value.policy),
+            "schema_version": BASELINE_RANKING_SCHEMA_VERSION,
+            "second_score": (
+                _finite_hex(candidates[1].suspicion_score, nonnegative=True)
+                if len(candidates) > 1
+                else None
+            ),
+            "top_score": _finite_hex(candidates[0].suspicion_score, nonnegative=True),
+        }
+    if isinstance(value, BaselineAbstention):
+        return {
+            "abstention_reason": _enum_value(value.reason, AbstentionReason),
+            "candidates": [
+                _candidate_payload(candidate) for candidate in value.evaluated_candidates
+            ],
+            "kind": "abstention",
+            "lead": None,
+            "policy": _policy_payload(value.policy),
+            "schema_version": BASELINE_RANKING_SCHEMA_VERSION,
+            "second_score": _optional_finite_hex(value.second_score, nonnegative=True),
+            "top_score": _optional_finite_hex(value.top_score, nonnegative=True),
+        }
+    _fail()
+
+
 def _canonical_json(payload: dict[str, object]) -> str:
     try:
         serialized = (
@@ -458,6 +501,16 @@ def verification_json(result: HypothesisVerificationResult) -> str:
     """Serialize one deterministic hypothesis-verification result canonically."""
     try:
         return _canonical_json(_verification_payload(result))
+    except CanonicalSerializationError:
+        raise
+    except Exception:
+        raise CanonicalSerializationError from None
+
+
+def baseline_ranking_json(baseline: BaselineResult) -> str:
+    """Serialize one deterministic baseline result (ranking or abstention) canonically."""
+    try:
+        return _canonical_json(_baseline_ranking_payload(baseline))
     except CanonicalSerializationError:
         raise
     except Exception:
@@ -671,9 +724,11 @@ def change_verification_json(result: ChangeHypothesisVerificationResult) -> str:
 
 
 __all__ = [
+    "BASELINE_RANKING_SCHEMA_VERSION",
     "CHANGE_VERIFICATION_SCHEMA_VERSION",
     "VERIFICATION_SCHEMA_VERSION",
     "CanonicalSerializationError",
+    "baseline_ranking_json",
     "change_ledger_json",
     "change_verification_json",
     "ledger_json",
