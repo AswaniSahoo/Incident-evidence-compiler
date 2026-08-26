@@ -20,13 +20,13 @@ same governance.
 
 A new top-level package `src/incident_evidence_compiler/llm/`, delivered in two slices.
 
-### Slice 5a — contracts, fake, and untrusted parser (standard library only)
+### Slice 5a, contracts, fake, and untrusted parser (standard library only)
 
 - `client.py`: an async `LLMClient` `Protocol` with `propose_metric_hypotheses`, plus frozen
-  typed records — `HypothesisRequest` (tenant, run, and the frozen allow-list of signal keys
+  typed records, `HypothesisRequest` (tenant, run, and the frozen allow-list of signal keys
   a proposal may reference) and `LLMProposal` (opaque `raw_json` plus optional model/token
   metadata). Callers depend on the protocol, never a concrete backend.
-- `errors.py`: an `LLMError` hierarchy mirroring the domain convention — a stable `code`
+- `errors.py`: an `LLMError` hierarchy mirroring the domain convention, a stable `code`
   class variable and no free-form message, so nothing from the model leaks across the
   boundary. Input-validation failures are `LLMValidationError` subclasses
   (`MalformedProposalError`, `EmptyProposalError`, `ProposalSchemaError`,
@@ -34,7 +34,7 @@ A new top-level package `src/incident_evidence_compiler/llm/`, delivered in two 
   provider failures are `LLMError` subclasses (`ProviderTimeoutError`,
   `ProviderUnavailableError`, `ProviderResponseError`).
 - `parsing.py`: `parse_metric_hypothesis(raw, *, allowed_signals)` treats `raw` as fully
-  untrusted — enforces an input-size ceiling before parsing, rejects empty text, parses JSON
+  untrusted, enforces an input-size ceiling before parsing, rejects empty text, parses JSON
   defensively, requires a JSON object, delegates deep structural validation to the domain's
   `validate_hypothesis_document`, and then enforces the caller's signal allow-list and the
   domain predicate budget. Every rejection raises a message-free error with its cause
@@ -42,7 +42,7 @@ A new top-level package `src/incident_evidence_compiler/llm/`, delivered in two 
 - `fake.py`: `FakeLLMClient` replays scripted proposals deterministically (including
   malformed ones) for hermetic tests.
 
-### Slice 5b — Gemini adapter (adds `google-genai`)
+### Slice 5b, Gemini adapter (adds `google-genai`)
 
 - `gemini.py`: `GeminiLLMClient` implements `LLMClient` over a narrow injected port
   (`_AsyncModels`), so retry, timeout, token capture, and malformed-response handling are
@@ -58,7 +58,7 @@ A new top-level package `src/incident_evidence_compiler/llm/`, delivered in two 
 ### Testing strategy
 
 The hermetic gate exercises the protocol, the fake, the untrusted parser (fuzz/failure
-cases), and the Gemini client's retry/timeout/token/malformed behavior via injected stubs —
+cases), and the Gemini client's retry/timeout/token/malformed behavior via injected stubs,
 all without network or credentials. A single live smoke test is gated on `GEMINI_API_KEY`
 (`skipUnless`) and is skipped in CI.
 

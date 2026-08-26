@@ -1,7 +1,7 @@
 """Hermetic tests for the application core (use-cases + worker).
 
 Everything runs against the in-memory persistence fake, the deterministic FakeLLMClient,
-and an in-memory telemetry source — no server, database, network, or credentials — so the
+and an in-memory telemetry source, no server, database, network, or credentials, so the
 full create -> enqueue -> worker -> verified report pipeline is exercised in the gate.
 """
 

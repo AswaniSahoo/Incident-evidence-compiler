@@ -21,7 +21,7 @@ test.
 Two standing constraints shape this phase:
 
 - **Domain independence** (engineering steering): domain code must not depend on databases,
-  drivers, or frameworks. The dependency direction is one-way — persistence may import
+  drivers, or frameworks. The dependency direction is one-way, persistence may import
   `domain`; `domain` must never import persistence.
 - **Hermetic CI** (Phases 0–3 precedent, ADR 0009): the locked test gate must not require a
   live database, network, or credentials. It runs against fakes only.
@@ -43,7 +43,7 @@ persistence/
   errors.py            # persistence-boundary typed errors (stable codes)
   repositories.py      # repository Protocols + UnitOfWork Protocol (stdlib only)
   memory.py            # in-memory fakes implementing the protocols (stdlib only)
-  postgres/            # psycopg driver — imported only where a DB is used
+  postgres/            # psycopg driver, imported only where a DB is used
     __init__.py
     unit_of_work.py    # async psycopg UnitOfWork + repositories
     queue.py           # SKIP LOCKED claim + lease
@@ -64,14 +64,14 @@ All tables carry `tenant_id text NOT NULL`; every repository query is tenant-sco
 identifier `value`. Serialized domain artifacts are stored as canonical JSON `text` (the domain
 already emits canonical leakage-safe JSON), with a `schema_version` column alongside.
 
-- **investigations** — one row per accepted request.
+- **investigations**, one row per accepted request.
   `id uuid PK`, `tenant_id`, `incident_id text`, `run_id text`,
   `window_start/window_injection/window_end timestamptz`,
   `status text` (`pending|running|succeeded|failed|cancelled`),
   `idempotency_key text NULL`, `created_at`, `updated_at`.
   Unique `(tenant_id, idempotency_key)` where `idempotency_key IS NOT NULL` → idempotent creation.
 
-- **jobs** — the claimable queue (one active job per investigation stage).
+- **jobs**, the claimable queue (one active job per investigation stage).
   `id uuid PK`, `investigation_id uuid FK`, `tenant_id`,
   `status text` (`queued|claimed|running|succeeded|failed|cancelled`),
   `available_at timestamptz`, `claimed_by text NULL`, `claimed_at timestamptz NULL`,
@@ -79,28 +79,28 @@ already emits canonical leakage-safe JSON), with a `schema_version` column along
   `created_at`, `updated_at`.
   Partial index `(available_at, id) WHERE status = 'queued'` for the claim scan.
 
-- **attempts** — append-only execution history per job (retry/audit).
+- **attempts**, append-only execution history per job (retry/audit).
   `id uuid PK`, `job_id uuid FK`, `tenant_id`, `attempt_number int`, `worker_id text`,
   `started_at`, `finished_at timestamptz NULL`,
   `outcome text NULL` (`succeeded|failed|timeout|cancelled`),
-  `error_code text NULL` (stable typed code — never a raw message), `created_at`.
+  `error_code text NULL` (stable typed code, never a raw message), `created_at`.
   Unique `(job_id, attempt_number)`.
 
-- **evidence** — persisted ledger entries, content-addressed.
+- **evidence**, persisted ledger entries, content-addressed.
   `id uuid PK`, `tenant_id`, `investigation_id uuid FK`, `run_id text`,
   `evidence_id text` (the content-bound domain `EvidenceId`),
   `ledger_kind text` (`metric|change`), `schema_version text`, `payload text` (canonical JSON),
   `created_at`.
   Unique `(tenant_id, run_id, evidence_id)` → idempotent append; enforces same-tenant/same-run.
 
-- **reports** — the replayable incident report, one per investigation.
+- **reports**, the replayable incident report, one per investigation.
   `id uuid PK`, `investigation_id uuid FK`, `tenant_id`, `run_id text`,
   `schema_version text`, `payload text` (canonical JSON), `created_at`.
   Unique `(investigation_id)`.
 
-- **audit** — append-only, sanitized event log.
+- **audit**, append-only, sanitized event log.
   `id bigserial PK`, `tenant_id`, `investigation_id uuid NULL`, `actor text`, `action text`,
-  `detail text NULL` (sanitized JSON — never prompt bodies, secrets, or PII), `occurred_at`.
+  `detail text NULL` (sanitized JSON, never prompt bodies, secrets, or PII), `occurred_at`.
 
 ### 3. Typed records + boundary errors (no anonymous dicts)
 
@@ -119,7 +119,7 @@ async context manager that yields the repositories and commits on clean exit / r
 error. All methods are `async`. Both the in-memory fake and the psycopg driver satisfy the same
 protocols, so callers (the future worker/control plane) never import a concrete backend.
 
-### 5. Async `psycopg` — the first runtime dependency
+### 5. Async `psycopg`, the first runtime dependency
 
 Add `psycopg` (v3, async) as the first entry in `pyproject.toml` `dependencies`, resolved and
 pinned exactly into `uv.lock` via `uv add` **at the start of Slice 2** (not now, and not for
@@ -147,10 +147,10 @@ WHERE id = $id;
 blocking, so N workers claim N distinct jobs without a double-claim. A lease
 (`lease_expires_at`) lets a crashed worker's job be reclaimed after expiry.
 
-### 7. Testing strategy — hermetic gate, opt-in integration
+### 7. Testing strategy, hermetic gate, opt-in integration
 
 - **Hermetic (always, in CI + the locked gate):** all protocol semantics are tested against the
-  in-memory fakes — idempotent creation, tenant isolation (cross-tenant reads return not-found),
+  in-memory fakes, idempotent creation, tenant isolation (cross-tenant reads return not-found),
   idempotent evidence append, single-claim semantics, lease expiry, FIFO-by-`available_at`.
 - **Integration (opt-in, skipped when `DATABASE_URL` is unset):** the psycopg driver, the
   migrations runner, and the **two-worker race test** (two real connections claiming from a pool
@@ -196,14 +196,14 @@ accepted.
 
 Aswani approved all three open questions:
 
-1. **Schema shape** — the six tables and their columns/constraints above are accepted as
+1. **Schema shape**, the six tables and their columns/constraints above are accepted as
    the minimal set for v1.
-2. **Dependency** — `psycopg[binary]` (v3, async) is accepted as the first runtime
+2. **Dependency**, `psycopg[binary]` (v3, async) is accepted as the first runtime
    dependency, pinned exactly to `psycopg[binary]==3.3.4` in `pyproject.toml` and locked
    to `psycopg==3.3.4` / `psycopg-binary==3.3.4` in `uv.lock`. The project validator was
    made phase-aware so this dependency is allowed only from Phase 4 onward; Phases 1–3
    still require an empty runtime dependency set.
-3. **Race-test placement** — the two-worker race test and all psycopg tests are opt-in
+3. **Race-test placement**, the two-worker race test and all psycopg tests are opt-in
    integration tests gated on `DATABASE_URL`, skipped in the hermetic gate.
 
 ## Verification (2026-07-17)
@@ -218,12 +218,12 @@ Implemented in three reviewed slices on `phase/04-persistence`:
 - Slice 3: the two-worker `SELECT ... FOR UPDATE SKIP LOCKED` race test.
 
 Hermetic locked gate: `ruff check`, `ruff format --check`, and `mypy` (51 source files)
-clean; `python -m unittest` runs 212 tests, OK with 8 skipped — the skips are exactly the
+clean; `python -m unittest` runs 212 tests, OK with 8 skipped, the skips are exactly the
 PostgreSQL integration tests, so the gate stays hermetic without a database; the project
 validator passes (full) under Phase 4; `uv sync --locked` resolves.
 
 Real-database verification (2026-07-17): the opt-in integration tests were run against
-PostgreSQL 16 via `docker compose up` with `DATABASE_URL` set. All 8 tests pass —
+PostgreSQL 16 via `docker compose up` with `DATABASE_URL` set. All 8 tests pass,
 migration idempotency, investigation idempotency, tenant-scoped reads, single-claim and
 FIFO claiming, expired-lease reclaim, content-addressed evidence dedupe, one-report
 conflict, and the two-worker `SELECT … FOR UPDATE SKIP LOCKED` race (25 jobs, two

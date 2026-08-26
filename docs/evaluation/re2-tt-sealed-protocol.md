@@ -1,4 +1,4 @@
-# RE2-TT sealed held-out run — protocol and log (Step 4)
+# RE2-TT sealed held-out run, protocol and log (Step 4)
 
 Purpose: convert the development-set result (RE2-OB) into a single **held-out** number on the
 sealed RE2-TT split, run exactly once against a frozen configuration. This is the last
@@ -12,7 +12,7 @@ Aggregate, label-free artifacts: `docs/evaluation/re2-tt-baseline.json`,
 ## Hard rules (do not violate)
 
 - Freeze first, run once. Do not tune anything against TT, and do not re-run it to chase a
-  better number — the first run is the reported run.
+  better number, the first run is the reported run.
 - RE2-TT raw data is never committed and lives outside the repository root (ADR 0009).
 - Only the aggregate, label-free metrics JSON is committed; per-case ground truth and source
   locators never leave the evaluation sidecar.
@@ -49,7 +49,7 @@ Before running: record the exact `git rev-parse HEAD` here so the freeze is audi
    `GEMINI_API_KEY`.
 3. A one-line sealed-authorization seam in `scripts/run_evaluation.py` (a `--sealed-confirm
    "<reason>"` flag that builds a `SealedSplitPermit` and passes it to `RcaevalAdapter.load`).
-   This seam is intentionally **not** added yet — it is the single small code change that
+   This seam is intentionally **not** added yet, it is the single small code change that
    turns the run into one command, and it should land in its own reviewed slice with a test,
    right before the run. Until then the loader denies TT by design.
 
@@ -58,7 +58,7 @@ Before running: record the exact `git rev-parse HEAD` here so the freeze is audi
 ```bash
 # 0. Freeze: record HEAD above, confirm the config table matches the committed OB JSON.
 
-# 1. Cheap pre-check on a handful of cases first (still counts as "opening" TT — do this only
+# 1. Cheap pre-check on a handful of cases first (still counts as "opening" TT, do this only
 #    once you intend the real run; it is here to catch a path/credential mistake, not to tune).
 uv run --locked python scripts/run_evaluation.py \
     --root /path/to/RE2/RE2-TT --split TT --arm baseline --limit 5 --sealed-confirm "final held-out eval"
@@ -81,7 +81,7 @@ uv run --locked python scripts/run_evaluation.py \
 ## After the run
 
 - Commit `docs/evaluation/re2-tt-*.json` (aggregate, label-free only).
-- Update the README evaluation table with the held-out row **exactly as measured** — whatever
+- Update the README evaluation table with the held-out row **exactly as measured**, whatever
   the numbers are. A worse held-out number than dev is normal and is reported honestly.
 - Only then fill the resume bullet's held-out placeholder.
 
@@ -99,7 +99,7 @@ Answered-only (over the cases where the system committed to a ranking): baseline
 (0 abstentions); gemini answered 38/90 with Top-1 0.368421, Top-3 0.368421, MRR 0.368421.
 
 Reading: the deterministic baseline localizes the held-out RE2-TT (train-ticket) faults well
-(Top-1 0.77). The verifier-gated Gemini arm is deliberately conservative — it abstains on 52/90
+(Top-1 0.77). The verifier-gated Gemini arm is deliberately conservative, it abstains on 52/90
 cases rather than assert an unverified conclusion, and underperforms the baseline where it does
 commit. That is the fail-closed design working as intended, not a regression: on this held-out
 system the restricted-hypothesis + deterministic-verifier path trades recall for the guarantee
@@ -115,5 +115,5 @@ authoritative split is the machine-readable `dataset.split` field, which is `"TT
 - Add the `--sealed-confirm` seam + a unit test asserting TT is denied without it and permitted
   with it (the small enabling slice above).
 - If RE2-SS is later promoted to a secondary development set (open decision), calibrate the
-  abstention threshold there — never on TT.
+  abstention threshold there, never on TT.
 - OpenTelemetry spans + estimated-cost metric during the sealed rerun (ADR 0015 deferral).

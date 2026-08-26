@@ -48,17 +48,17 @@ Independent review initially returned `NEEDS_CHANGES`. It found overstated guard
 
 Local commits:
 
-- `e1391acda89e8294203ed5fec2fce5e42b86a2c8` — `docs: define incident compiler scope and provenance`
-- `c6fbf567344c12fc95ad359e695eb90633019f61` — `chore: add Kiro governance and validation gates`
+- `e1391acda89e8294203ed5fec2fce5e42b86a2c8`, `docs: define incident compiler scope and provenance`
+- `c6fbf567344c12fc95ad359e695eb90633019f61`, `chore: add Kiro governance and validation gates`
 
 Executed on Windows against committed `HEAD` `c6fbf567344c12fc95ad359e695eb90633019f61`:
 
-- `git show --check --oneline --format=fuller HEAD` — passed
-- `python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py` — passed
-- `python -m unittest discover -s tests -p "test_*.py" -v` — 16 tests passed
-- `python scripts/validate_project.py` — passed in full mode
-- `python scripts/validate_project.py --quick` — passed
-- `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json` — exit code 0
+- `git show --check --oneline --format=fuller HEAD`, passed
+- `python -m py_compile scripts/validate_project.py .kiro/hooks/project_hook.py tests/test_project_hook.py tests/test_validate_project.py`, passed
+- `python -m unittest discover -s tests -p "test_*.py" -v`, 16 tests passed
+- `python scripts/validate_project.py`, passed in full mode
+- `python scripts/validate_project.py --quick`, passed
+- `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`, exit code 0
 - The live legacy log was scrubbed; its replacement passed the privacy schema check and remained ignored by Git
 - `actions/checkout` and `actions/setup-python` were resolved through GitHub and pinned to full commit SHAs
 

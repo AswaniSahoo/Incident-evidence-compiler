@@ -359,7 +359,7 @@ def _serve_canned(
 
 
 class PrometheusOverHttpSocketTests(unittest.IsolatedAsyncioTestCase):
-    """The real ``urllib`` transport against a real socket — a loopback stub, not a Prometheus.
+    """The real ``urllib`` transport against a real socket, a loopback stub, not a Prometheus.
 
     Every other test injects ``fetch``, so this is the only place ``over_http``'s actual HTTP
     path runs: URL construction, the bearer header, status handling, and body reading.

@@ -1,4 +1,4 @@
-# ADR 0015: Observability — Prometheus metrics (Phase 8)
+# ADR 0015: Observability, Prometheus metrics (Phase 8)
 
 - Status: Accepted
 - Date: 2026-07-18
@@ -31,12 +31,12 @@ bucket, matching the Prometheus contract.
 
 Recorded by the worker into an injected registry:
 
-- `iec_worker_jobs_total{outcome}` — succeeded / failed / retried / cancelled.
-- `iec_worker_stage_duration_seconds{stage}` — histogram over `telemetry_load`, `baseline`,
+- `iec_worker_jobs_total{outcome}`, succeeded / failed / retried / cancelled.
+- `iec_worker_stage_duration_seconds{stage}`, histogram over `telemetry_load`, `baseline`,
   `llm_propose`, `verify`, `persist`.
-- `iec_provider_timeouts_total` — LLM provider deadline hits.
-- `iec_llm_tokens_total{kind}` — prompt / completion tokens (when the provider reports them).
-- `iec_investigation_verdicts_total{verdict}` — supported / refuted / unknown.
+- `iec_provider_timeouts_total`, LLM provider deadline hits.
+- `iec_llm_tokens_total{kind}`, prompt / completion tokens (when the provider reports them).
+- `iec_investigation_verdicts_total{verdict}`, supported / refuted / unknown.
 
 Labels are low-cardinality and carry **no tenant, incident, run, signal, or model-text
 values**, so the metrics surface leaks nothing sensitive.
@@ -77,8 +77,8 @@ required files; the CI command set and pinned dependencies are unchanged.
 
 ## Rejected alternatives
 
-- **Add `prometheus-client`** — a new runtime dependency for a small, bounded metric set;
+- **Add `prometheus-client`**, a new runtime dependency for a small, bounded metric set;
   rejected in favor of the stdlib renderer to preserve the minimal-dependency stance.
-- **Tenant-labelled metrics** — high cardinality and a leakage risk; rejected.
-- **Authenticate `/metrics`** — non-standard for scrapers and unnecessary given label-free
+- **Tenant-labelled metrics**, high cardinality and a leakage risk; rejected.
+- **Authenticate `/metrics`**, non-standard for scrapers and unnecessary given label-free
   metrics; network restriction is the deployment-time control instead.

@@ -26,7 +26,7 @@ integration surface and surfaced decisions this ADR must resolve before implemen
 
 ## Decision
 
-### 1. Hexagonal split — application core, then FastAPI adapter
+### 1. Hexagonal split, application core, then FastAPI adapter
 
 A new framework-independent `application` package (use-cases + the `Worker`) depends only on
 the existing ports (`UnitOfWork`/repositories, `LLMClient`) plus a new `TelemetrySource`
@@ -54,7 +54,7 @@ one `EvidenceRecord` per ledger entry + one `ReportRecord` (`verification_json`)
 - **Per-attempt deadline** via `asyncio.timeout`; a timeout records a `TIMEOUT` attempt.
 - **Untrusted-output failure** (`LLMValidationError`) is terminal: the investigation is set
   `FAILED` with the error's stable `code` recorded as `error_code` (never model text), and the
-  job `FAILED` (no retry — malformed output will not fix itself).
+  job `FAILED` (no retry, malformed output will not fix itself).
 - **Provider failure** (`ProviderUnavailableError`/`ProviderTimeoutError`) is retryable up to
   `max_attempts` (the job returns to `QUEUED` with backoff via `available_at`); exhaustion is
   terminal `FAILED`.
@@ -86,9 +86,9 @@ Endpoints (async FastAPI):
 - `GET /investigations/{id}/report` → the report, or `404` (absent) / `409` (not ready).
 - `GET /health` → liveness; the **only unauthenticated** route.
 
-**Auth (per ADR 0007 — static bearer tokens + tenant scoping, not a full identity system):**
+**Auth (per ADR 0007, static bearer tokens + tenant scoping, not a full identity system):**
 a middleware/dependency maps a bearer token to a `TenantId`; a missing/unknown token is
-`401`. **Every** data query is tenant-scoped — a caller can never read another tenant's
+`401`. **Every** data query is tenant-scoped, a caller can never read another tenant's
 investigation (cross-tenant access returns `404`, not `403`, to avoid existence leaks).
 Tokens come from configuration/environment; no secret is logged and errors are leakage-safe
 (stable problem codes, no model text or tenant data). This is a network-exposed service, so
@@ -151,12 +151,12 @@ via `httpx.ASGITransport`. Real PostgreSQL and real Gemini remain opt-in and ski
 
 Aswani approved all three open questions:
 
-1. **Dependencies** — `fastapi==0.139.2` and `uvicorn[standard]==0.51.0` are accepted as the
+1. **Dependencies**, `fastapi==0.139.2` and `uvicorn[standard]==0.51.0` are accepted as the
    Phase 6 runtime dependencies, pinned exactly in `pyproject.toml`/`uv.lock`; the validator's
    phase-aware allowance is extended to Phase 6 and Phases 1–5 are unchanged.
-2. **Telemetry via a port now** — the `TelemetrySource` abstraction with an in-memory fake is
+2. **Telemetry via a port now**, the `TelemetrySource` abstraction with an in-memory fake is
    accepted for Phase 6; a durable RCAEval-backed source is deferred to Phase 7.
-3. **Additive touches** — the `metric_evidence_entry_json` serializer, the `incident` field on
+3. **Additive touches**, the `metric_evidence_entry_json` serializer, the `incident` field on
    `HypothesisRequest`, and the typed `FakeLLMClient` exhaustion error are accepted.
 
 ## Verification (2026-07-18)

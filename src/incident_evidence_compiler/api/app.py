@@ -3,7 +3,7 @@
 A thin inbound adapter over the application use-cases. Authentication is a static bearer
 token mapped to a tenant; every data route is authenticated and tenant-scoped, and a
 cross-tenant lookup returns 404 (never 403) to avoid leaking existence. ``/health`` is the
-only unauthenticated route. Error bodies carry only stable codes — never model text,
+only unauthenticated route. Error bodies carry only stable codes, never model text,
 tenant data, or internals.
 """
 

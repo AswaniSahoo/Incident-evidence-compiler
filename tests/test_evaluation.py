@@ -1,7 +1,7 @@
 """Hermetic tests for the Phase 7 evaluation harness.
 
 Everything here is deterministic and runs against synthetic, in-memory cases plus the
-committed leakage fixture and the ``FakeLLMClient`` — no network, database, credentials,
+committed leakage fixture and the ``FakeLLMClient``, no network, database, credentials,
 or out-of-repo data. The real RCAEval RE2 evaluation is driven by ``scripts/run_evaluation.py``
 against an out-of-repo split and is not part of this gate.
 """

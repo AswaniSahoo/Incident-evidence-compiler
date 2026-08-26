@@ -52,9 +52,9 @@ prediction. Metrics are aggregate and label-free.
 
 ### 4. Two arms
 
-- **baseline** — deterministic, no network: rank metric shifts and predict the services of
+- **baseline**, deterministic, no network: rank metric shifts and predict the services of
   the ranked candidate signals.
-- **gemini** — the full restricted-hypothesis pipeline: compile the evidence ledger, ask an
+- **gemini**, the full restricted-hypothesis pipeline: compile the evidence ledger, ask an
   `LLMClient` for hypotheses over the allow-listed signals, parse the untrusted output,
   verify it deterministically, and predict the services of the signals the verifier
   `SUPPORTED` (ranked by baseline suspicion). Any untrusted-output failure is a genuine

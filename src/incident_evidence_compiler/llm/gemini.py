@@ -3,7 +3,7 @@
 The client depends on a narrow injected port (``_AsyncModels``) rather than the
 ``google-genai`` SDK directly, so it is unit-testable without a network and the SDK
 coupling is confined to one adapter with a single ``Any`` seam. The SDK is imported
-lazily inside ``from_api_key`` — importing this module opens no network and needs no
+lazily inside ``from_api_key``, importing this module opens no network and needs no
 credentials.
 
 Operational behavior: each attempt is bounded by a deadline; a transient failure is
@@ -182,7 +182,7 @@ class _GenaiModelsAdapter:
     """Adapts a ``google-genai`` client to the ``_AsyncModels`` port.
 
     The whole SDK client is retained (not just ``client.aio.models``) so its lazily-created
-    async HTTP transport is not garbage-collected and closed after construction — a closed
+    async HTTP transport is not garbage-collected and closed after construction, a closed
     transport otherwise fails every request with "Cannot send a request, as the client has
     been closed." The client is held as ``Any`` so all provider typing stays confined here.
     """

@@ -11,7 +11,7 @@ only 19 of 90 real cases, rejecting the rest because real RE2-OB metric CSVs con
 (missing) cells and occasional non-finite values. The strict `_number` parser raised
 `INVALID_NUMBER` on an empty cell and `NON_FINITE_NUMBER` on a non-finite value, failing the
 entire case on the first such cell. ADR 0009 deferred the handling decision to its own slice
-because it affects evidence semantics — missing data is not zero.
+because it affects evidence semantics, missing data is not zero.
 
 Relevant domain facts (verified in code):
 
@@ -39,7 +39,7 @@ timestamp, rather than rejecting the whole case or coercing the value to zero.
 5. **Drops are auditable, not silent.** The parser counts dropped cells and exposes
    `dropped_cell_count` on `ParsedCase`, satisfying the no-silent-fallback rule.
 6. A fully empty column yields an empty signal (zero points), which the baseline treats as
-   ineligible — the signal exists in the schema but carries no usable evidence.
+   ineligible, the signal exists in the schema but carries no usable evidence.
 
 `NON_FINITE_NUMBER` is retained in the error vocabulary but is no longer emitted by metric-cell
 parsing.
@@ -50,7 +50,7 @@ parsing.
 
 - Real RE2-OB parse coverage rose from 19/90 to 88/90 cases without inventing data: missing and
   non-finite cells become gaps, never zero.
-- Evidence semantics stay honest — sparse signals become ineligible via the existing baseline
+- Evidence semantics stay honest, sparse signals become ineligible via the existing baseline
   gate rather than contributing fabricated zero-valued points.
 - The `dropped_cell_count` makes data quality auditable per case.
 

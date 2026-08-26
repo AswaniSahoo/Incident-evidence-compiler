@@ -1,4 +1,4 @@
-# Devlog 0006 — Phase 5: async LLM provider boundary
+# Devlog 0006, Phase 5: async LLM provider boundary
 
 Status: in progress on branch `phase/05-llm-provider` (not yet merged to `main`). Phase 5a
 is committed; Phase 5b (Gemini + governance) is implemented and pending independent review.
@@ -11,7 +11,7 @@ proposed, with model output treated as untrusted and verified deterministically 
 
 ## Slices
 
-- Slice 5a (no dependency, committed): `llm` package — async `LLMClient` protocol, typed
+- Slice 5a (no dependency, committed): `llm` package, async `LLMClient` protocol, typed
   `HypothesisRequest`/`LLMProposal`, a leakage-safe `LLMError` hierarchy, `FakeLLMClient`, and
   `parse_metric_hypothesis` that treats model JSON as untrusted (size ceiling before parse,
   empty/'{}' checks, defensive `json.loads`, domain-validator reuse, predicate budget, and a
@@ -25,7 +25,7 @@ proposed, with model output treated as untrusted and verified deterministically 
 ## Testing strategy
 
 The hermetic gate covers the protocol, the fake, the untrusted parser (fuzz/failure cases),
-and the Gemini client's retry/timeout/token/malformed handling via injected stubs — no
+and the Gemini client's retry/timeout/token/malformed handling via injected stubs, no
 network or credentials. A single live smoke test is gated on `GEMINI_API_KEY` and skipped in
 CI.
 

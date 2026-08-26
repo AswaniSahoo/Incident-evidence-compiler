@@ -13,8 +13,8 @@ weakening tenant/run isolation or replay guarantees?
 
 The next slice adds **change/deployment events**. In real incidents the most
 common human question is "did something change right before this broke?" A
-system that answers that question descriptively — without asserting that the
-change *caused* the incident — is exactly the boundary this project exists to
+system that answers that question descriptively, without asserting that the
+change *caused* the incident, is exactly the boundary this project exists to
 hold. Change events are also the most bounded telemetry shape available:
 discrete, typed, timestamped occurrences rather than continuous series, so the
 untrusted-parsing surface stays minimal.
@@ -44,15 +44,15 @@ No dependency, network, dataset, database, or model is added.
 
 New module `domain/changes.py`:
 
-- `ChangeEventKey(value: str)` — a frozen, non-empty opaque key identifying the
+- `ChangeEventKey(value: str)`, a frozen, non-empty opaque key identifying the
   changed component, analogous to `SignalKey`. It is opaque telemetry, never a
   human service or fault label.
-- `ChangeKind` — a closed `StrEnum`: `DEPLOYMENT`, `CONFIGURATION`, `ROLLBACK`,
+- `ChangeKind`, a closed `StrEnum`: `DEPLOYMENT`, `CONFIGURATION`, `ROLLBACK`,
   `SCALING`, `FEATURE_FLAG`. No free text, no open category.
-- `ChangeEvent` — frozen dataclass of `(event_key, kind, occurred_at)`.
+- `ChangeEvent`, frozen dataclass of `(event_key, kind, occurred_at)`.
   `occurred_at` is validated and normalized to aware UTC via the existing
   `to_utc`.
-- `ChangeEventLog` — an immutable, canonically ordered collection of
+- `ChangeEventLog`, an immutable, canonically ordered collection of
   `ChangeEvent`, bounded by `MAX_CHANGE_EVENTS` (proposed `512`). An empty log
   is valid. Events are ordered by `(occurred_at, kind.value, event_key.value)`.
   Two events sharing all three fields are indistinguishable and rejected as a
@@ -113,12 +113,12 @@ never repairs forged state.
 New module `domain/change_hypotheses.py`, reusing `HypothesisSemantics` and
 `HypothesisComposition` from Phase 2.
 
-- `ChangePhaseConstraint` — a `StrEnum`: `WITHIN_WINDOW`, `PRE_INJECTION`,
+- `ChangePhaseConstraint`, a `StrEnum`: `WITHIN_WINDOW`, `PRE_INJECTION`,
   `POST_INJECTION`.
-- `ChangeCooccurrencePredicate(predicate_id, event_key, kind, phase_constraint)`
-  — one exact target, one exact kind, one temporal region. No wildcards, no
+- `ChangeCooccurrencePredicate(predicate_id, event_key, kind, phase_constraint)`,
+  one exact target, one exact kind, one temporal region. No wildcards, no
   free text, no negation, no threshold, no executable field.
-- `ChangeHypothesisDocument` — bound to an exact tenant/incident/run, carrying
+- `ChangeHypothesisDocument`, bound to an exact tenant/incident/run, carrying
   `semantics`, `composition`, and 1..32 predicates with unique
   `predicate_id`s. Predicates over the same key/kind with different constraints
   are allowed (they are not tautological); only duplicate identifiers are
@@ -176,8 +176,8 @@ asserted region, the temporal assertion is contradicted by positive evidence of
 the change occurring at an incompatible time. This mirrors how the metric
 verifier trusts the recorded candidate as the authoritative observation for a
 signal. Total absence stays `UNKNOWN`, preserving "unknown is distinct from
-false." The alternative — treating any absence, including phase-specific
-absence, as `UNKNOWN` (a two-valued SUPPORTED/UNKNOWN predicate) — is more
+false." The alternative, treating any absence, including phase-specific
+absence, as `UNKNOWN` (a two-valued SUPPORTED/UNKNOWN predicate), is more
 conservative but never yields `REFUTED`. This ADR proposes the first model and
 flags the choice for explicit approval.
 

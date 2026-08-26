@@ -1,4 +1,4 @@
-# Devlog 0004 — Phase 4: durable persistence boundary
+# Devlog 0004, Phase 4: durable persistence boundary
 
 Status: implemented and independently reviewed on branch `phase/04-persistence` (not yet
 merged to `main`). Hermetic locked gate green: `ruff`, `ruff format --check`, and `mypy`
@@ -12,12 +12,12 @@ a live PostgreSQL 16 (see the verification note below).
 A minimal, tenant-scoped durable persistence boundary (ADR 0011): typed records and
 status enums, repository + unit-of-work protocols, in-memory fakes for the hermetic
 gate, an async `psycopg` driver, forward-only SQL migrations, and
-`SELECT ... FOR UPDATE SKIP LOCKED` job claiming — with domain code untouched and CI
+`SELECT ... FOR UPDATE SKIP LOCKED` job claiming, with domain code untouched and CI
 hermetic against the fakes.
 
 ## Slices
 
-- Slice 1 (no new dependency): `persistence` package — `records`, `errors`,
+- Slice 1 (no new dependency): `persistence` package, `records`, `errors`,
   `repositories` protocols, and in-memory fakes with copy-on-write transactional
   isolation. Independently reviewed; full locked gate green.
 - Slice 2 (adds `psycopg[binary]==3.3.4`, the first runtime dependency): initial schema
@@ -37,7 +37,7 @@ PostgreSQL, and are skipped in CI so the gate needs no database, network, or cre
 ## Verification note
 
 Real-database behavior was verified on 2026-07-17: `docker compose up` (PostgreSQL 16)
-with `DATABASE_URL` set, then `python -m unittest tests.test_persistence_postgres` — all 8
+with `DATABASE_URL` set, then `python -m unittest tests.test_persistence_postgres`, all 8
 integration tests pass, including the two-worker `SKIP LOCKED` race. The hermetic gate
 still skips these when `DATABASE_URL` is unset, so CI needs no database.
 

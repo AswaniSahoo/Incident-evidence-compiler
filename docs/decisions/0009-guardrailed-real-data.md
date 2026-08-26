@@ -8,8 +8,8 @@
 
 Phases 0–3 were built and verified entirely against synthetic fixtures. The Phase 1 RCAEval
 adapter (`src/incident_evidence_compiler/evaluation/rcaeval/`) encodes assumptions about the
-real RE2 layout — evaluator-discovered metric files, sibling `inject_time.txt`, and a leakage
-boundary that keeps source paths and ground-truth labels out of investigation code — but those
+real RE2 layout, evaluator-discovered metric files, sibling `inject_time.txt`, and a leakage
+boundary that keeps source paths and ground-truth labels out of investigation code, but those
 assumptions have never been exercised against the actual archive. The upcoming persistence and
 evaluation phases need development grounded in the real data shapes, not only synthetic ones.
 
@@ -72,14 +72,14 @@ The acquisition and smoke check were executed:
   `multi-source-data` directories are correctly not discovered as metric cases.
 - Running the committed Phase 1 loader against the real split surfaced a real-shape gap: only
   19 of 90 cases parse. 70 fail `invalid_number` and 1 fails `non_finite_number`, because real
-  RE2-OB metric CSVs contain empty (missing) cells and occasional non-finite values — for example
+  RE2-OB metric CSVs contain empty (missing) cells and occasional non-finite values, for example
   `checkoutservice_cpu/1/simple_metrics.csv` has empty cells where services do not emit a given
   signal during part of the window. The committed strict parser rejects the entire case on the
   first such cell.
 
 This is the intended value of grounding in real shapes. Handling missing and non-finite metric
 cells (reject the case, drop the point, or represent an explicit gap) is a domain decision that
-affects evidence semantics — missing data is not zero — and is deliberately deferred to its own
+affects evidence semantics, missing data is not zero, and is deliberately deferred to its own
 slice with tests, ahead of any real evaluation. It is recorded as a new open decision, not fixed
 here.
 

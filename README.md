@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-325_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-340_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
@@ -33,7 +33,7 @@ row). Metrics are aggregate and label-free; the raw artifacts live in
 
 Here's the honest part, because it's the interesting part. The deterministic baseline sees the
 actual metric values and localizes the faulty service well. The Gemini arm is handed only the
-signal *names* — never the values — so it's guessing among ~72 signals, and it often names a
+signal *names*, never the values, so it's guessing among ~72 signals, and it often names a
 downstream symptom instead of the cause. It does badly. That's fine. The point of the system is
 that the verifier gates those guesses: the model abstained or got filtered half the time, and it
 produced **zero** invalid evidence citations. The LLM can be wrong without the system being
@@ -41,7 +41,7 @@ wrong.
 
 ### Held-out (sealed RE2-TT)
 
-Opened once, on 2026-07-19, against a frozen configuration (commit `0a7854e`) — the same
+Opened once, on 2026-07-19, against a frozen configuration (commit `0a7854e`), the same
 thresholds and model as the development run, no tuning against TT. 90 cases, 0 skipped. This is
 the [sealed-run protocol](docs/evaluation/re2-tt-sealed-protocol.md) executed exactly once;
 artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),
@@ -54,7 +54,7 @@ artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),
 
 The held-out numbers hold the same shape as development, on a completely different system
 (train-ticket, not the dev split): the deterministic baseline localizes well (Top-1 0.77), and
-the verifier-gated Gemini arm stays conservative — it abstained on 52 of 90 cases rather than
+the verifier-gated Gemini arm stays conservative, it abstained on 52 of 90 cases rather than
 assert an unverified cause, and again produced **zero** invalid evidence citations. Accuracy
 drops from the dev split (harder, unseen system), which is the honest and expected direction.
 Method notes: [ADR 0014](docs/decisions/0014-phase-7-real-data-evaluation.md).
@@ -218,7 +218,7 @@ curl -fsS http://127.0.0.1:8000/health
 One thing I want to be straight about: `IEC_LLM_PROVIDER=fake` is a labelled smoke client, not a
 model, and `IEC_TELEMETRY=rcaeval` is a demo bridge over the benchmark, not a production
 ingestion path. `IEC_TELEMETRY=prometheus` *is* the real ingestion path, and it has been run
-against a real Prometheus — fed synthetic data, see [the demo](#demo-a-real-prometheus-with-synthetic-data).
+against a real Prometheus, fed synthetic data, see [the demo](#demo-a-real-prometheus-with-synthetic-data).
 `/health` and `/metrics` are open on purpose; put them behind your network boundary when you
 deploy.
 
@@ -232,8 +232,8 @@ open routes.
 
 | Method & path | Purpose | Success | Notable errors |
 |---|---|---|---|
-| `GET /health` | Liveness (open) | `200 {"status":"ok"}` | — |
-| `GET /metrics` | Prometheus text (open, no tenant/PII labels) | `200 text/plain` | — |
+| `GET /health` | Liveness (open) | `200 {"status":"ok"}` |, |
+| `GET /metrics` | Prometheus text (open, no tenant/PII labels) | `200 text/plain` |, |
 | `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401`, `422 <code>` |
 | `GET /investigations/{id}` | Status | `200 {"investigation_id","status"}` | `401`, `404 investigation_not_found` |
 | `GET /investigations/{id}/report` | Verified report | `200 {...,"report":{...}}` | `404`, `409 report_not_ready` |
@@ -283,14 +283,14 @@ internals cross the boundary.
 ## Demo: a real Prometheus with synthetic data
 
 The `demo` compose profile stands up a real Prometheus scraping a small synthetic exporter, and
-points the ingestion path at it. Everything about the plumbing is genuine — a real Prometheus, a
+points the ingestion path at it. Everything about the plumbing is genuine, a real Prometheus, a
 real range query, the real worker and verifier. Only the *numbers* are invented, and the exporter
 says so in its own docstring.
 
-The scenario is a **payment-routing incident** (ADR 0018). Four components — `bank_router`,
-`checkout`, `upi_switch`, `ledger_db` — sit flat until a published instant, when `bank_router`, as
+The scenario is a **payment-routing incident** (ADR 0018). Four components, `bank_router`,
+`checkout`, `upi_switch`, `ledger_db`, sit flat until a published instant, when `bank_router`, as
 if a bad deploy just shipped, degrades: its latency and error ratio climb an order of magnitude
-while the rest stay healthy. `ledger_db` is a deliberate decoy — a database-shaped signal a model
+while the rest stay healthy. `ledger_db` is a deliberate decoy, a database-shaped signal a model
 is tempted to blame. This is the shape of a fintech reliability bar (*every money action
 explainable, bounded and gated*) with IEC's twist: the model may propose, but only the verifier
 decides.
@@ -306,27 +306,27 @@ fault exactly instead of by guesswork, waits for Prometheus to scrape both sides
 investigation and polls for the verified report.
 
 **With a real model (2026-08-23).** Run with `IEC_LLM_PROVIDER=vertex` (`gemini-2.5-flash` on a
-dedicated GCP project, ADC only — no credential in any container). Gemini, which sees only signal
+dedicated GCP project, ADC only, no credential in any container). Gemini, which sees only signal
 *names* and never a single value, proposed a four-predicate hypothesis
 (`payment_transaction_degradation`) casting a wide net across the payment surface. The verifier
 resolved each predicate against the live data:
 
 | Predicate Gemini proposed | Verdict | Grounds |
 |---|---|---|
-| `bank_router_latency_increase` | **`supported`** | cited evidence `sha256:758e…` — the real injected fault |
-| `checkout_error_increase` | **`unknown`** | `weak_evidence` — checkout never moved |
-| `ledger_db_error_increase` | **`unknown`** | `weak_evidence` — the decoy; the model reached for the database, the data didn't |
-| `upi_switch_latency_increase` | **`unknown`** | `weak_evidence` — never moved |
+| `bank_router_latency_increase` | **`supported`** | cited evidence `sha256:758e…`, the real injected fault |
+| `checkout_error_increase` | **`unknown`** | `weak_evidence`, checkout never moved |
+| `ledger_db_error_increase` | **`unknown`** | `weak_evidence`, the decoy; the model reached for the database, the data didn't |
+| `upi_switch_latency_increase` | **`unknown`** | `weak_evidence`, never moved |
 
 **One verified-true, three guesses withheld, zero false assertions.** The model over-reached four
-ways; the verifier endorsed only the single claim real evidence supported — including refusing the
+ways; the verifier endorsed only the single claim real evidence supported, including refusing the
 tempting `ledger_db` decoy. That is the whole thesis in one report: the LLM is allowed to guess,
 only deterministic code is allowed to decide, and being wrong three times out of four costs nothing
 because none of it became a conclusion.
 
 **Without a model at all.** The same run with `IEC_LLM_PROVIDER=fake` (a smoke client needing no
-API, which names the lexicographically-first ingested signal — here `bank_router`'s error ratio)
-returned **`supported`** citing `sha256:8a99…` — proof the ingestion path carries real evidence end
+API, which names the lexicographically-first ingested signal, here `bank_router`'s error ratio)
+returned **`supported`** citing `sha256:8a99…`, proof the ingestion path carries real evidence end
 to end without any provider.
 
 Pulling the plug is also covered: with Prometheus stopped, an investigation terminates as `failed`
@@ -345,7 +345,7 @@ uv run --locked python -m unittest tests.test_persistence_postgres
 GEMINI_API_KEY=… uv run --locked python -m unittest tests.test_llm_gemini
 ```
 
-The PostgreSQL suite was last verified green on 2026-08-23 — **8 tests against `postgres:16`**,
+The PostgreSQL suite was last verified green on 2026-08-23, **8 tests against `postgres:16`**,
 including the two-worker `FOR UPDATE SKIP LOCKED` race (`test_two_workers_claim_each_job_exactly_once`).
 See [devlog 0014](docs/devlog/0014-postgres-skip-locked-evidence.md).
 
@@ -409,7 +409,7 @@ I'd rather list this plainly than let you find it the hard way.
 - **Prometheus ingestion is proven against a real Prometheus, but only with synthetic data.** The
   bundled `demo` profile runs a real Prometheus scraping a synthetic exporter, and the full path
   has been exercised end to end (see [the demo](#demo-a-real-prometheus-with-synthetic-data)). The
-  numbers are invented, so this says nothing about accuracy on real production telemetry — it
+  numbers are invented, so this says nothing about accuracy on real production telemetry, it
   proves the ingestion, not the diagnosis.
 - **Telemetry selectors are process-wide, not per tenant.** With `IEC_TELEMETRY=prometheus` the
   PromQL selectors come from environment config, so every tenant a process authenticates sees the
@@ -428,7 +428,7 @@ I'd rather list this plainly than let you find it the hard way.
   through the API (the live demo had to be inspected out of band), and split the worker into its
   own process.
 - Make the evaluation harness stream cases (score-one-discard-one) so the full RE2-TT split runs
-  without holding all cases in memory — the sealed run currently needs the whole split resident.
+  without holding all cases in memory, the sealed run currently needs the whole split resident.
 - OpenTelemetry spans per stage and an estimated-cost metric (the Prometheus counters and latency
   histograms already ship at `/metrics`).
 
@@ -439,15 +439,15 @@ which I audited as a learning reference and cite in [`docs/provenance.md`](docs/
 
 ## License
 
-Source, docs, and config are Apache-2.0 — see [`LICENSE`](LICENSE) and
+Source, docs, and config are Apache-2.0, see [`LICENSE`](LICENSE) and
 [ADR 0008](docs/decisions/0008-apache-2.0-license.md). RCAEval dataset licensing is separate and
 documented in [`docs/datasets/rcaeval-re2.md`](docs/datasets/rcaeval-re2.md); the raw benchmark
 data is never committed.
 
 ## If you want to read further
 
-- [`docs/decisions/`](docs/decisions/) — the 17 ADRs, where the real design arguments are.
-- [`docs/devlog/`](docs/devlog/) — a phase-by-phase journal with the evidence behind each claim.
-- [`docs/architecture/overview.md`](docs/architecture/overview.md) — components and trust
+- [`docs/decisions/`](docs/decisions/), the 19 ADRs, where the real design arguments are.
+- [`docs/devlog/`](docs/devlog/), a phase-by-phase journal with the evidence behind each claim.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md), components and trust
   boundaries in more detail.
-- [`AGENTS.md`](AGENTS.md) — the operating contract for anyone (human or agent) working in here.
+- [`AGENTS.md`](AGENTS.md), the operating contract for anyone (human or agent) working in here.

@@ -15,7 +15,7 @@ suite was verified against `postgres:16` (devlog 0014).
 A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
 ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned
 `supported` only for `bank_router_latency_increase` (cited evidence `sha256:758e…`) and `unknown`
-for the other three, including the `ledger_db` decoy — one verified-true, three guesses withheld,
+for the other three, including the `ledger_db` decoy, one verified-true, three guesses withheld,
 zero false assertions. (ADR 0017's earlier `checkout` runs and the divergent-default Gemini fix are
 recorded in devlog 0012.)
 
@@ -93,7 +93,7 @@ full pass), plus a container build and smoke test:
   synthetic exporter via the bundled `demo` compose profile: 8 signals / 35 points ingested, the
   baseline ranked the injected `checkout` fault first and second (20.19 and 18.24 vs ≤ 0.29 for
   healthy signals), and the report came back `unknown`/`weak_evidence` because the non-model smoke
-  client names the lexicographically-first signal, which is flat — the verifier correctly refused
+  client names the lexicographically-first signal, which is flat, the verifier correctly refused
   it. With Prometheus stopped, the investigation terminated as `failed` with no retry storm and no
   transport detail in the logs. The data is synthetic, so this proves the ingestion path, not
   diagnostic accuracy. PromQL selectors are process-wide, so all tenants in a process see the same
@@ -126,7 +126,7 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
-Merge `feat/prometheus-telemetry` → `main` (PR, build-in-public) and push — Aswani runs the push
+Merge `feat/prometheus-telemetry` → `main` (PR, build-in-public) and push, Aswani runs the push
 (automated shell pushes stay disabled). Then the immediate goal is the **Razorpay AI Buildathon**
 (Open Track): the repo, ADRs, sealed held-out metrics, and the live Vertex run already satisfy the
 "public repo + architecture docs + honest metrics + working, not prototype" bar; the one net-new
@@ -141,7 +141,7 @@ current import).
 
 ### Earlier, still true
 
-Step 4 (sealed RE2-TT held-out run) is DONE — executed once on 2026-07-19, on branch
+Step 4 (sealed RE2-TT held-out run) is DONE, executed once on 2026-07-19, on branch
 `step/04-sealed-tt-eval`. A `--sealed-confirm "<reason>"` seam was added to
 `scripts/run_evaluation.py` with three tests (commit `0a7854e`, the frozen run commit); RE2-TT
 was downloaded + md5-verified + extracted outside the repo; both arms ran at `0a7854e` with the

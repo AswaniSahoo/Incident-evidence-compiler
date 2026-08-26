@@ -27,7 +27,7 @@ the appendix. Update the README to state the license and remove the publication 
 
 ### Positive
 
-- Permissive reuse with an explicit patent grant and a clear warranty/liability disclaimer —
+- Permissive reuse with an explicit patent grant and a clear warranty/liability disclaimer,
   stronger contributor and user protection than MIT for a project that may attract contributions.
 - Publication is unblocked per ADR 0007; every pushed commit still passes the phase gate.
 - Compatible with the standard-library-only runtime and common downstream licenses.

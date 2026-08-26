@@ -1,4 +1,4 @@
-# 0019 — Expose the baseline ranking in the investigation report
+# 0019, Expose the baseline ranking in the investigation report
 
 - Status: accepted
 - Date: 2026-08-23 (accepted 2026-08-23, implemented on `main`)
@@ -9,8 +9,8 @@
 
 ## Context
 
-The deterministic baseline is the system's most accurate component — on RE2-OB it reaches Top-1
-0.767 against the verifier-gated LLM arm's 0.156 — yet the HTTP API exposes only the *verified
+The deterministic baseline is the system's most accurate component, on RE2-OB it reaches Top-1
+0.767 against the verifier-gated LLM arm's 0.156, yet the HTTP API exposes only the *verified
 hypothesis*, never the ranking. Both live demos made this concrete: the baseline ranked the faulty
 signal first by a wide margin, but the only way to see it was a throwaway inspection script.
 Devlogs 0012 and 0013 both close on exactly this question.
@@ -20,7 +20,7 @@ The ranking already exists at runtime. The worker computes
 evidence ledger, then discards it. `BaselineResult` is either a `BaselineRanking` (policy, per-signal
 evaluations, candidates sorted by descending `suspicion_score`, and the lead margin) or a
 `BaselineAbstention` (a reason plus the top/second scores). Both are derived entirely from ingested
-telemetry: signal keys, robust medians, and scores — **no fault labels, no ground truth, no model
+telemetry: signal keys, robust medians, and scores, **no fault labels, no ground truth, no model
 text**, so the artifact is leakage-safe under the same tenant/run scoping the report endpoint
 already enforces.
 
@@ -34,18 +34,18 @@ the report endpoint, without touching the frozen verification schema.
    medians, scale) or the abstention (reason, top/second score). Content-derived from telemetry
    only; nothing label-bearing is included.
 
-2. **Additive, nullable persistence — the verification payload is untouched.** `ReportRecord` gains
+2. **Additive, nullable persistence, the verification payload is untouched.** `ReportRecord` gains
    an optional `baseline_payload: str | None`; the reports table gains a nullable `baseline_payload`
    column (an additive migration; existing rows read back `NULL`). The verification `payload` and its
    `metric-hypothesis-verification.v1` schema do not change, so every existing consumer of that
-   payload — replay, the evaluation harness — is unaffected by construction.
+   payload, replay, the evaluation harness, is unaffected by construction.
 
 3. **Additive API.** The report endpoint returns a new sibling field `baseline_ranking` alongside
    `report` (`null` for a report that predates this change). Clients that ignore unknown fields are
    unaffected; there is no verification-schema version bump.
 
 4. **The worker threads the value it already has.** The `baseline` computed for the ledger is
-   serialized and set on the `ReportRecord` — one serialize call and one field, no new pipeline
+   serialized and set on the `ReportRecord`, one serialize call and one field, no new pipeline
    stage and no new external call.
 
 ## Consequences
@@ -60,11 +60,11 @@ the report endpoint, without touching the frozen verification schema.
 
 ## Alternatives considered
 
-- **Fold the ranking into the verification payload (schema v2)** — rejected. It bumps the frozen
+- **Fold the ranking into the verification payload (schema v2)**, rejected. It bumps the frozen
   `metric-hypothesis-verification.v1` and ripples into replay and the evaluation harness for no
   benefit over an additive sibling field.
-- **A separate `GET /investigations/{id}/ranking` endpoint** — rejected for v1. A second route and
+- **A separate `GET /investigations/{id}/ranking` endpoint**, rejected for v1. A second route and
   round-trip for data the report reader already wants in hand; a sibling field is simpler and there
   is one obvious consumer.
-- **Recompute on read** — rejected. Telemetry is not retained after the run, so the ranking must be
+- **Recompute on read**, rejected. Telemetry is not retained after the run, so the ranking must be
   persisted at report time; recomputation is impossible without re-ingesting.

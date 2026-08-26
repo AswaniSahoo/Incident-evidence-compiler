@@ -47,7 +47,7 @@ _DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # psycopg's async connection cannot run on Windows' default ProactorEventLoop. Only when
 # the integration tests are enabled (DATABASE_URL set) do we select the selector-based
-# policy, so the hermetic gate — which skips these tests — is left untouched.
+# policy, so the hermetic gate, which skips these tests, is left untouched.
 if _DATABASE_URL is not None:
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

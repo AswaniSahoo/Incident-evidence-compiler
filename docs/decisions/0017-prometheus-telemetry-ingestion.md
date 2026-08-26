@@ -1,11 +1,11 @@
-# 0017 — Production telemetry ingestion via Prometheus
+# 0017, Production telemetry ingestion via Prometheus
 
 - Status: accepted
 - Date: 2026-08-20 (accepted 2026-08-23, implemented on `feat/prometheus-telemetry`)
 - Deciders: Aswani
 - Supersedes: none
 - Related: 0009 (guardrailed real data), 0010 (missing cells are gaps), 0013 (control plane +
-  worker), 0016 (runnable entrypoint — named telemetry ingestion as the explicit v1 non-goal)
+  worker), 0016 (runnable entrypoint, named telemetry ingestion as the explicit v1 non-goal)
 
 ## Context
 
@@ -32,7 +32,7 @@ which the Python standard library already covers.
 Add a read-only `PrometheusTelemetrySource` that range-queries a live Prometheus over the incident
 window and maps each returned series to a `MetricSignal`, feeding the existing pipeline unchanged.
 
-1. **Stdlib only — no new dependency.** The client uses `urllib.request` + `json` to call
+1. **Stdlib only, no new dependency.** The client uses `urllib.request` + `json` to call
    Prometheus `GET /api/v1/query_range`. This preserves the project's stdlib-only runtime identity
    (deps only when an ADR sanctions them) and needs no dependency ADR or lockfile change.
 
@@ -54,7 +54,7 @@ window and maps each returned series to a `MetricSignal`, feeding the existing p
    (a `PrometheusLimits` mirroring the RCAEval `LoaderLimits`). Missing/non-finite samples are
    dropped as gaps (never coerced to zero), consistent with ADR 0010. Any timeout, transport error,
    non-2xx status, malformed body, or limit breach raises a typed failure that the source maps to
-   `TelemetryUnavailableError` — which the worker already treats as a terminal, leakage-safe
+   `TelemetryUnavailableError`, which the worker already treats as a terminal, leakage-safe
    failure. Untrusted response bodies are validated before any value is trusted.
 
 5. **Series → signal mapping.** Each Prometheus series' metric name + labels render a stable signal
@@ -64,7 +64,7 @@ window and maps each returned series to a `MetricSignal`, feeding the existing p
 6. **Demo via a bundled throwaway Prometheus (Option ii).** `docker-compose` gains an optional
    profile with a real Prometheus plus a tiny synthetic exporter that emits an injected anomaly, so
    a single command demonstrates a genuine end-to-end ingestion. This is a **real** Prometheus and
-   the **real** ingestion path fed **synthetic** data — clearly labelled as demo data, so it makes
+   the **real** ingestion path fed **synthetic** data, clearly labelled as demo data, so it makes
    no fake production claim (AGENTS.md). Production scrape/remote-write topologies remain out of
    scope.
 
@@ -73,7 +73,7 @@ window and maps each returned series to a `MetricSignal`, feeding the existing p
 - Closes the #1 documented limitation; the README limitation flips to "ingests real telemetry via
   Prometheus (read-only range queries); production scrape topologies still out of scope."
 - The port signature change touches `application/telemetry.py`, `runtime/telemetry.py`,
-  `runtime/server.py`, `application/worker.py`, and their tests — all mechanical.
+  `runtime/server.py`, `application/worker.py`, and their tests, all mechanical.
 - No new runtime dependency; `pyproject.toml`/`uv.lock` unchanged; the phase gate is unchanged.
 - New env surface is documented and fail-fast; no secret is logged.
 - Built in TDD slices: (1) bounded stdlib client, (2) series→signal mapper, (3) source + port
@@ -81,10 +81,10 @@ window and maps each returned series to a `MetricSignal`, feeding the existing p
 
 ## Alternatives considered
 
-- **`prometheus-api-client` (or similar) dependency** — rejected: it buys little over a dozen lines
+- **`prometheus-api-client` (or similar) dependency**, rejected: it buys little over a dozen lines
   of `urllib`, and adding a runtime dependency here *costs* credibility against the stdlib-only
   identity and would require its own dependency ADR.
-- **Per-incident PromQL/window stored in Postgres** — deferred: more realistic but needs a schema
+- **Per-incident PromQL/window stored in Postgres**, deferred: more realistic but needs a schema
   migration and API changes; it is product scope, not the minimal credible ingestion slice.
-- **Push / remote-write ingestion or a durable tenant-owned ledger** — rejected for v1: stateful,
+- **Push / remote-write ingestion or a durable tenant-owned ledger**, rejected for v1: stateful,
   much larger, and not required to close the "reads real telemetry" gap.

@@ -1,7 +1,7 @@
 """A bounded Prometheus range-query client (ADR 0017), standard-library only.
 
 The client talks to Prometheus' ``GET /api/v1/query_range`` HTTP+JSON API. It depends on an
-injected ``fetch`` callable — ``(url, headers, timeout_seconds) -> (status, body)`` — rather than
+injected ``fetch`` callable, ``(url, headers, timeout_seconds) -> (status, body)``, rather than
 ``urllib`` directly, so it is unit-testable with no network and the transport coupling is confined
 to one adapter. The parsed response is untrusted input: every non-happy path (transport status,
 malformed body, unexpected shape, or a bound breach) raises a stable, message-free
@@ -190,7 +190,7 @@ def series_to_signals(series: Iterable[PrometheusSeries]) -> tuple[MetricSignal,
     Prometheus renders staleness and division artefacts as ``NaN``/``±Inf``. Those samples are
     *gaps*: the point is dropped rather than coerced to zero, and a series left with no finite
     point is dropped entirely (ADR 0010). What is not a gap is a response the domain cannot
-    represent — an unnameable series, non-monotonic samples, or two series rendering one key
+    represent, an unnameable series, non-monotonic samples, or two series rendering one key
     (which ``rank_metric_shifts`` rejects as ``DuplicateSignalError``). Those raise
     ``PrometheusError`` so the caller fails closed rather than analyzing a repaired timeline.
     """
@@ -225,8 +225,8 @@ class PrometheusTelemetrySource:
 
     Three boundary properties matter. The ``urllib`` fetch is blocking, so ``load`` hands the
     whole query-and-map step to a worker thread rather than stalling the worker's event loop.
-    Every typed failure — deadline, transport, non-2xx, malformed body, bound breach, or a
-    response the domain cannot represent — becomes ``TelemetryUnavailableError``, which the
+    Every typed failure, deadline, transport, non-2xx, malformed body, bound breach, or a
+    response the domain cannot represent, becomes ``TelemetryUnavailableError``, which the
     worker already treats as a terminal, leakage-safe failure. And the deadline is *per query*,
     so a configuration with many selectors must size it accordingly.
 

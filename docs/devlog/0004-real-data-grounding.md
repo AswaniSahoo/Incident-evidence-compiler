@@ -45,12 +45,12 @@ Four decisions were recorded and executed:
   and are `.gitignore`d.
 - **Refactor:** `evidence.py` (752 lines) split into a focused `evidence/`
   package (`types`, `_identity`, `_ledger`, `_decisions`, `_parsing`) with an
-  unchanged public API — a behavior-preserving move verified by the full gate.
-- **ADR 0009:** RE2-OB acquired locally under a guardrail — downloaded,
+  unchanged public API, a behavior-preserving move verified by the full gate.
+- **ADR 0009:** RE2-OB acquired locally under a guardrail, downloaded,
   checksum-verified, stored and extracted **outside** the repository root so the
   validator's no-raw-data guarantee is untouched; never committed; CI stays
   hermetic; RE2-TT sealed, RE2-SS reserved.
-- **ADR 0010:** a missing (empty) or non-finite metric cell is a gap — the point
+- **ADR 0010:** a missing (empty) or non-finite metric cell is a gap, the point
   is dropped for that signal at that timestamp, never coerced to zero. Non-empty
   non-numeric cells still hard-fail `INVALID_NUMBER`; the `time` column stays
   strict; `dropped_cell_count` is exposed on `ParsedCase` for auditability.
@@ -110,7 +110,7 @@ by metric-cell parsing (non-finite is now a gap). PROJECT_CONTEXT's duplicated
 ## Limitations
 
 Only RE2-OB was acquired; RE2-TT stays sealed and RE2-SS reserved. No sanitized,
-label-free fixture derived from real shapes is committed yet — that remains a
+label-free fixture derived from real shapes is committed yet, that remains a
 deferred slice. Two OB cases remain unparsed pending the trailing-empty-timestamp
 decision. The loader change is verified by synthetic tests; the real-data numbers
 are local-only.
@@ -121,5 +121,5 @@ Phase 4 is the durable persistence boundary. The open questions to resolve befor
 implementation: what is the minimal schema (investigations, jobs, attempts,
 evidence, reports, audit), what are the repository protocols and their in-memory
 fakes, and does `psycopg` (async) enter now as the first runtime dependency with
-`SELECT … FOR UPDATE SKIP LOCKED` job claiming — all while keeping CI hermetic
+`SELECT … FOR UPDATE SKIP LOCKED` job claiming, all while keeping CI hermetic
 against fakes and committing no live database dependency into the test gate.

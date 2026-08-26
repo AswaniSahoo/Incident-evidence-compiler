@@ -1,4 +1,4 @@
-# Devlog 0009 — Phase 8: observability (Prometheus metrics)
+# Devlog 0009, Phase 8: observability (Prometheus metrics)
 
 Status: implemented on branch `phase/07-real-data` (continuing v1 hardening). Finalized with
 verified evidence at acceptance.
@@ -7,7 +7,7 @@ verified evidence at acceptance.
 
 Make the pipeline observable during an evaluation rerun: per-stage latency, job outcomes,
 provider-timeout rate, token usage, and verdict distribution, exposed on a Prometheus
-`/metrics` endpoint — without adding a runtime dependency (ADR 0015).
+`/metrics` endpoint, without adding a runtime dependency (ADR 0015).
 
 ## First principle
 
@@ -17,7 +17,7 @@ metrics label carry tenant, incident, run, signal, or model-text values.
 ## Smallest implemented slice
 
 - `observability/metrics.py`: a thread-safe `MetricsRegistry` with `Counter` and `Histogram`
-  (cumulative buckets, `_sum`/`_count`, `+Inf`) and a Prometheus text renderer — standard
+  (cumulative buckets, `_sum`/`_count`, `+Inf`) and a Prometheus text renderer, standard
   library only.
 - `Worker` gains an injected `metrics` registry (default private/unshared) and records:
   `iec_worker_jobs_total{outcome}`, `iec_worker_stage_duration_seconds{stage}`,
@@ -32,7 +32,7 @@ metrics label carry tenant, incident, run, signal, or model-text values.
 histogram buckets with `_sum`/`_count`/`+Inf`; idempotent registration; timer), that a
 successful worker run records the outcome/verdict/stage metrics into a shared registry, that a
 failed run records a `failed` outcome, and that the ASGI `/metrics` endpoint is open and
-renders the registry. Fully hermetic — no network, database, or credentials.
+renders the registry. Fully hermetic, no network, database, or credentials.
 
 ## Verification
 

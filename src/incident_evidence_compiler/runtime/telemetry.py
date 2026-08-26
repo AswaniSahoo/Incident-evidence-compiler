@@ -3,7 +3,7 @@
 This is a *demo* source, not production telemetry ingestion. It reuses the existing bounded,
 audited RCAEval primitives to index an already-extracted split (outside the repo, ADR 0009)
 by each case's directory path, and resolves an investigation's ``incident_id`` to that case's
-metric signals. It reads only the metric CSV, the injection time, and the directory path — it
+metric signals. It reads only the metric CSV, the injection time, and the directory path, it
 never consults the evaluation sidecar or any ground-truth label, and performs no scoring.
 """
 

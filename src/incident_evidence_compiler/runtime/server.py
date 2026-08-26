@@ -114,7 +114,7 @@ async def run_worker_loop(
 ) -> None:
     """Claim and process jobs until ``stop_event`` is set, sleeping only when idle.
 
-    A single iteration's failure is logged (without payloads — the worker itself is
+    A single iteration's failure is logged (without payloads, the worker itself is
     leakage-safe) and the loop backs off rather than dying, so one bad job cannot wedge the
     process.
     """

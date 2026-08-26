@@ -146,8 +146,8 @@ class GeminiDefaultModelTest(unittest.TestCase):
     """The client's default model must not drift from the configured one (regression guard).
 
     A retired default (e.g. ``gemini-2.0-flash``) 404s at request time but is masked whenever a
-    caller passes a model explicitly; only a caller relying on the default — like the live smoke
-    test below — is bitten. Pinning the two defaults to one value stops them diverging again.
+    caller passes a model explicitly; only a caller relying on the default, like the live smoke
+    test below, is bitten. Pinning the two defaults to one value stops them diverging again.
     """
 
     def test_client_default_matches_the_configured_default(self) -> None:

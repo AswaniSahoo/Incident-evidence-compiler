@@ -1,4 +1,4 @@
-# Devlog 0007 — Phase 6: control plane and worker
+# Devlog 0007, Phase 6: control plane and worker
 
 Status: implemented on branch `phase/06-control-plane` (not yet merged). Finalized with
 verified evidence at acceptance.
@@ -11,8 +11,8 @@ verified, replayable report (ADR 0013).
 
 ## Slices
 
-- 6a (no dependency): a framework-independent `application` package — `CreateInvestigation`,
-  `GetInvestigationStatus`, `GetReport`, and the `Worker` loop — depending only on the
+- 6a (no dependency): a framework-independent `application` package, `CreateInvestigation`,
+  `GetInvestigationStatus`, `GetReport`, and the `Worker` loop, depending only on the
   persistence/LLM ports plus a new `TelemetrySource` port (in-memory fake here; a durable
   RCAEval-backed source arrives in Phase 7). The worker: RUNNING → load telemetry → baseline
   → compile ledger → LLM propose → parse (untrusted) → verify → persist one content-addressed
@@ -21,7 +21,7 @@ verified, replayable report (ADR 0013).
   only a stable `error_code`; cancellation short-circuits. Additive touches: a per-entry
   `metric_evidence_entry_json` serializer, an `incident` field on `HypothesisRequest`, and a
   typed `FakeLLMClient` exhaustion error.
-- 6b (adds `fastapi==0.139.2` + `uvicorn[standard]==0.51.0`): a FastAPI control plane —
+- 6b (adds `fastapi==0.139.2` + `uvicorn[standard]==0.51.0`): a FastAPI control plane,
   `POST /investigations` (202 + id, `Idempotency-Key`), `GET /investigations/{id}`,
   `GET /investigations/{id}/report`, and an open `GET /health`. Bearer-token auth maps a
   token to a tenant; every data route is authenticated and tenant-scoped, and cross-tenant

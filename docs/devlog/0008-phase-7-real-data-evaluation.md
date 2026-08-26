@@ -1,4 +1,4 @@
-# Devlog 0008 — Phase 7: real-data integration and development evaluation
+# Devlog 0008, Phase 7: real-data integration and development evaluation
 
 Status: implemented on branch `phase/07-real-data` (not yet merged). Finalized with
 verified evidence at acceptance.
@@ -18,13 +18,13 @@ a committed artifact. Do not fabricate a result when infrastructure is unavailab
 
 ## Smallest implemented slices
 
-- **7a — integration:** an `evaluation/harness/baseline_inputs.py` bridge maps adapter
+- **7a, integration:** an `evaluation/harness/baseline_inputs.py` bridge maps adapter
   signals to strictly-positive baseline inputs and a signal key to its service; an opt-in
   `skip_unparsable_cases` mode on the adapter tolerates the two trailing-empty-`time` cases
   (ADR 0010) and counts them. A hermetic end-to-end test flows the committed leakage fixture
   through the bridge and the worker and asserts no label or locator appears on any persisted
   evidence/report surface.
-- **7b — evaluation:** `scoring.py` (Top-1/Top-3/MRR/abstention/invalid-ID, overall and
+- **7b, evaluation:** `scoring.py` (Top-1/Top-3/MRR/abstention/invalid-ID, overall and
   answered-only) and `runner.py` (baseline arm; verifier-gated Gemini arm with bounded
   concurrency and transient-retry). `scripts/run_evaluation.py` runs an arm against an
   out-of-repo split and emits an aggregate, label-free JSON artifact under `docs/evaluation/`.
@@ -38,7 +38,7 @@ RE2-OB, 88 cases (2 skipped for a trailing empty `time` row):
 | baseline (deterministic) | 0.932 | 0.989 | 0.959 | 0.000 | 0 |
 | gemini-2.5-flash (Vertex) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | 0 |
 
-The deterministic baseline — which sees the metric values — localizes the injected service
+The deterministic baseline, which sees the metric values, localizes the injected service
 strongly on the observable split. The Gemini arm receives only signal *names*, so it guesses
 among ~72 signals and frequently proposes downstream symptoms; the deterministic verifier
 gates those guesses, yielding 50% abstention and **zero** invalid evidence citations. This
@@ -55,7 +55,7 @@ fixed minimally behind the unchanged strict parser:
    rerouted the API-key client to Vertex (401/403). Fixed by pinning `vertexai=False` on the
    API-key path and adding an explicit `from_vertex` path for the paid Vertex backend.
 2. **Client-lifetime bug (root cause):** the adapter retained only `client.aio.models`, so
-   the parent `genai.Client` was garbage-collected and closed its HTTP transport — every call
+   the parent `genai.Client` was garbage-collected and closed its HTTP transport, every call
    failed with "Cannot send a request, as the client has been closed." Fixed by retaining the
    whole client.
 3. **Markdown fences:** the model wraps JSON in ```` ```json ```` blocks; the adapter now
@@ -72,7 +72,7 @@ only on the quota-limited Developer API. `gemini-2.5-flash` is the working Verte
 ## Reproducible evidence
 
 - Baseline: `uv run python scripts/run_evaluation.py --root <RE2-OB> --arm baseline --out
-  docs/evaluation/re2-ob-baseline.json` — deterministic, no network.
+  docs/evaluation/re2-ob-baseline.json`, deterministic, no network.
 - Gemini: same with `--arm gemini --provider vertex --project <id> --location us-central1
   --model gemini-2.5-flash --concurrency 4`, using ADC on a billing-enabled project.
 - Hermetic gate green: `compileall`; unittest (with the PostgreSQL and Gemini-live tests

@@ -26,7 +26,7 @@ The ledger records:
 - exactly one `MetricShiftEvidence` entry for every unique `SignalEvaluation`;
 - entries sorted by exact, case-sensitive `SignalKey.value`.
 
-Each entry records the signal key, pre/post point counts, eligibility, scale floors, and—when eligible—the complete candidate replay fields. Ineligible entries contain no invented candidate values. Empty ledgers are valid; duplicate signal keys or internally inconsistent baseline objects are rejected with stable domain errors.
+Each entry records the signal key, pre/post point counts, eligibility, scale floors, and-when eligible-the complete candidate replay fields. Ineligible entries contain no invented candidate values. Empty ledgers are valid; duplicate signal keys or internally inconsistent baseline objects are rejected with stable domain errors.
 
 Evidence IDs are deterministic and content-bound. The canonical entry payload includes the schema version, all ledger bindings, UTC window, policy, decision context, signal key, counts, eligibility, and candidate fields. Datetimes use fixed UTC RFC 3339 microseconds ending in `Z`; finite floats use `float.hex()`. The ID is:
 
@@ -80,7 +80,7 @@ Every predicate result records its predicate ID, verdict, optional reason, obser
 
 Canonical serializers emit UTF-8 JSON with sorted object keys, compact separators, explicit schema versions, fixed declaration/canonical array ordering, lowercase hashes, finite floats encoded with `float.hex()`, and one terminal LF. Identical logical inputs produce byte-identical output.
 
-Serialization is an investigation artifact, not an evaluation sidecar. It may contain opaque tenant/incident/run IDs, signal keys, replay numbers, verdicts, and evidence IDs. It must never contain RCAEval source paths, service/fault labels, ground-truth sidecars, prompts, model output, credentials, environment values, arbitrary exception text, or causal/root-cause wording. Custom representations remain bounded and expose only type, counts, schema, and verdict—not identifiers, signal keys, or values.
+Serialization is an investigation artifact, not an evaluation sidecar. It may contain opaque tenant/incident/run IDs, signal keys, replay numbers, verdicts, and evidence IDs. It must never contain RCAEval source paths, service/fault labels, ground-truth sidecars, prompts, model output, credentials, environment values, arbitrary exception text, or causal/root-cause wording. Custom representations remain bounded and expose only type, counts, schema, and verdict-not identifiers, signal keys, or values.
 
 ## Governance and tooling
 

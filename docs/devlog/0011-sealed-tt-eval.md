@@ -1,4 +1,4 @@
-# Devlog 0011 — Step 4: the one sealed RE2-TT held-out run
+# Devlog 0011, Step 4: the one sealed RE2-TT held-out run
 
 Status: executed once on 2026-07-19 on branch `step/04-sealed-tt-eval`. Freeze commit `0a7854e`;
 results commit `4f84e86`. This is the reported held-out number and will not be re-run.
@@ -6,7 +6,7 @@ results commit `4f84e86`. This is the reported held-out number and will not be r
 ## Goal
 
 Convert the RE2-OB development result into a single held-out number on the sealed RE2-TT split,
-run exactly once against a frozen configuration — the last credibility upgrade before the README
+run exactly once against a frozen configuration, the last credibility upgrade before the README
 can claim a held-out accuracy. Governed by `docs/evaluation/re2-tt-sealed-protocol.md`.
 
 ## The enabling seam (TDD)
@@ -34,13 +34,13 @@ root (ADR 0009 guardrail intact). Never committed.
 ## The blocker: MemoryError (root-caused, not fixed)
 
 Both arms first crashed with `MemoryError`. Root cause (measured, not guessed): `RcaevalAdapter`
-materializes all 90 cases into one in-memory `EvaluationBatch` before scoring — ~524k
+materializes all 90 cases into one in-memory `EvaluationBatch` before scoring, ~524k
 `MetricPoint` objects/case, ~42 MB/case, ~3.8 GB tracked / ~5–6 GB RSS for the full split. The
 dev machine had ~1.6 GB free of 15.7 GB. `--limit` does not help: it trims scoring, which runs
 after the full load. The computation is already per-case and `aggregate` is an order-independent
 fold, so the retention is incidental. Decision (Aswani): keep the frozen code as-is and free RAM
-(ran with ~8 GB free) rather than refactor before the sealed number. Proper fix — a streaming
-score-one-discard-one path, provably score-identical by reproducing the OB baseline JSON — is on
+(ran with ~8 GB free) rather than refactor before the sealed number. Proper fix, a streaming
+score-one-discard-one path, provably score-identical by reproducing the OB baseline JSON, is on
 the README roadmap and deferred. Vertex connectivity was probed with one live call first, so an
 auth failure could not masquerade as a real all-abstention result.
 
@@ -53,7 +53,7 @@ auth failure could not masquerade as a real all-abstention result.
 
 Gemini answered 38/90; answered-only Top-1 0.368421. Reading: the deterministic baseline
 localizes the unseen train-ticket faults well (Top-1 0.77); the verifier-gated arm stays
-conservative — it abstained on 52/90 rather than assert an unverified cause and again emitted
+conservative, it abstained on 52/90 rather than assert an unverified cause and again emitted
 zero invalid evidence citations. Accuracy drops from the dev split, the honest direction for an
 unseen system. The fail-closed design is working as intended, not regressing.
 

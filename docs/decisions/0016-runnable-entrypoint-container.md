@@ -1,4 +1,4 @@
-# 0016 — Runnable server entrypoint and container image (Phase 9)
+# 0016, Runnable server entrypoint and container image (Phase 9)
 
 - Status: accepted
 - Date: 2026-07-18
@@ -12,14 +12,14 @@
 Phases 0–8 delivered a verified deterministic domain, PostgreSQL persistence with a
 `SKIP LOCKED` worker queue, an async Gemini provider boundary, a FastAPI control plane, a
 real-data evaluation, and a dependency-free `/metrics` endpoint. Everything was exercised
-**in-process** — the control plane through `httpx.ASGITransport`, the worker by directly
+**in-process**, the control plane through `httpx.ASGITransport`, the worker by directly
 calling `run_once`. There was no committed way to actually *run* the system as a process, and
 no container image. The v1 ship plan (`MASTER-PLAN.md`, ADR 0007) lists "runnable server
 entrypoint + Dockerfile + docker-build CI gate" as the last remaining code slice before the
 sealed run and demo.
 
 The blocker was never the HTTP wiring; it was **telemetry**. The worker needs a
-`TelemetrySource`, but v1 has no production telemetry-ingestion path — the only real metric
+`TelemetrySource`, but v1 has no production telemetry-ingestion path, the only real metric
 data the project has is RCAEval RE2, and the only in-repo source was the hermetic in-memory
 fake. Wiring a server that silently pretends to have production ingestion would violate the
 no-fake-production-claims rule (`AGENTS.md`).
@@ -64,7 +64,7 @@ container image and a docker-build + smoke gate in CI. No new runtime dependency
    `RcaevalTelemetrySource` reuses the existing bounded RCAEval primitives (`discover_cases`,
    `parse_case`, `to_baseline_inputs`) to index cases by their directory path and resolve an
    investigation's `incident_id` to that case's signals and window. It reads only the metric
-   CSV, the injection time, and the directory path — it never consults the evaluation sidecar
+   CSV, the injection time, and the directory path, it never consults the evaluation sidecar
    or any ground-truth label, and it performs no scoring. Raw RCAEval data is still never
    committed (ADR 0009); the source points at an out-of-repo root.
 

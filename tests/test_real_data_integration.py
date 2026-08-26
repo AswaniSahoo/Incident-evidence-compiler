@@ -3,7 +3,7 @@
 The hermetic tests flow the committed leakage fixture (which carries the
 ``CANARYSERVICE``/``OTHERSERVICE``/``DO_NOT_LEAK_PATH`` sentinels) through the
 RCAEval adapter, the baseline-input bridge, and the full worker pipeline over the
-in-memory persistence fake and ``FakeLLMClient`` — then assert that no ground-truth
+in-memory persistence fake and ``FakeLLMClient``, then assert that no ground-truth
 label or source locator appears on any persisted evidence or report surface.
 
 An additional opt-in test runs the harness against a real, out-of-repo RE2-OB split

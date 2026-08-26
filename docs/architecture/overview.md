@@ -15,7 +15,7 @@ Everything else depends inward through ports (protocols); adapters implement the
 ```mermaid
 flowchart LR
     subgraph edge["Inbound adapter"]
-        API["api/ — FastAPI control plane"]
+        API["api/, FastAPI control plane"]
     end
     subgraph app["Application core (framework-independent)"]
         UC["use-cases: create / status / report"]
@@ -29,9 +29,9 @@ flowchart LR
         SER["canonical serialization"]
     end
     subgraph infra["Outbound adapters"]
-        PG["persistence/ — psycopg + in-memory fakes"]
-        GEM["llm/ — Gemini + FakeLLMClient + strict parser"]
-        RCA["evaluation/ — RCAEval adapter + harness"]
+        PG["persistence/, psycopg + in-memory fakes"]
+        GEM["llm/, Gemini + FakeLLMClient + strict parser"]
+        RCA["evaluation/, RCAEval adapter + harness"]
     end
 
     API --> UC

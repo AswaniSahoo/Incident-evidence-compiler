@@ -5,9 +5,9 @@ anything about real payment systems. Its only job is to give a bundled throwaway
 something real to scrape, so the real ingestion path (`IEC_TELEMETRY=prometheus`) can be exercised
 end to end against a real server. Standard-library only, one route, no dependency.
 
-The scenario is a payment-routing incident. Four components are exposed — ``bank_router``,
+The scenario is a payment-routing incident. Four components are exposed, ``bank_router``,
 ``checkout``, ``upi_switch``, and ``ledger_db``. Before the injection instant every component looks
-alike. After it — modelling a ``bank_router`` deploy gone bad — ``bank_router`` degrades: its
+alike. After it, modelling a ``bank_router`` deploy gone bad, ``bank_router`` degrades: its
 latency climbs by roughly an order of magnitude and its error ratio jumps, while the others stay
 flat. ``ledger_db`` is a deliberate healthy decoy: a database-shaped signal a model might wrongly
 blame, so the verifier's ``unknown`` refusal can be shown against real ingested data. The faulty
@@ -111,7 +111,7 @@ def main() -> int:
     # Binds all interfaces because it only ever runs inside the demo container network.
     server = ThreadingHTTPServer(("0.0.0.0", _PORT), _Handler)
     print(
-        f"synthetic payment-incident exporter on :{_PORT}/metrics — DEMO DATA; "
+        f"synthetic payment-incident exporter on :{_PORT}/metrics, DEMO DATA; "
         f"'{_FAULTY}' degrades at unixtime {_INJECTION_UNIXTIME:.0f} "
         f"(+{_INJECT_AFTER_SECONDS:.0f}s)",
         flush=True,

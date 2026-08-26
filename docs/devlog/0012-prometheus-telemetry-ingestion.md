@@ -1,8 +1,8 @@
-# Devlog 0012 — Prometheus telemetry ingestion (slices 1–4)
+# Devlog 0012, Prometheus telemetry ingestion (slices 1–4)
 
 Status: implemented on branch `feat/prometheus-telemetry` (ADR 0017, **accepted**). Slice 1
-landed at `4304dcf`; slices 2 and 3 followed. Slice 4 — the bundled demo profile and the live run
-against a real Prometheus — is **done**: an ingestion-only run (fake client) on 2026-08-22, and a
+landed at `4304dcf`; slices 2 and 3 followed. Slice 4, the bundled demo profile and the live run
+against a real Prometheus, is **done**: an ingestion-only run (fake client) on 2026-08-22, and a
 run through real **Vertex Gemini** on 2026-08-23. Both are in sections 6 and 7.
 
 ## 1. Problem
@@ -20,14 +20,14 @@ move to accommodate a new source.
 
 ## 3. Alternatives considered
 
-- **A Prometheus client dependency** (`prometheus-api-client` or similar) — rejected. It buys
+- **A Prometheus client dependency** (`prometheus-api-client` or similar), rejected. It buys
   little over a dozen lines of `urllib`, and a runtime dependency here costs the stdlib-only
   identity and would need its own dependency ADR.
-- **Per-incident PromQL and window stored in PostgreSQL** — deferred. More realistic, but it needs
+- **Per-incident PromQL and window stored in PostgreSQL**, deferred. More realistic, but it needs
   a schema migration and API changes; that is product scope, not the minimal credible slice.
-- **Push / remote-write ingestion, or a durable tenant-owned ledger** — rejected for v1: stateful
+- **Push / remote-write ingestion, or a durable tenant-owned ledger**, rejected for v1: stateful
   and much larger, and not required to close the "reads real telemetry" gap.
-- **Sorting or de-duplicating malformed sample ordering** — rejected. Silent repair would forge a
+- **Sorting or de-duplicating malformed sample ordering**, rejected. Silent repair would forge a
   timeline the server never sent. Non-monotonic samples fail closed instead.
 
 ## 4. Decision and trade-offs
@@ -44,27 +44,27 @@ accept and ignore it) and the worker (which passes `investigation.window`).
 worker's event loop.
 
 Selectors come from process configuration, not per-incident state. That keeps the slice small, but
-it means every tenant a process authenticates sees the same metrics — a real multi-tenancy gap,
+it means every tenant a process authenticates sees the same metrics, a real multi-tenancy gap,
 now documented in the README rather than left in the source only.
 
 ## 5. Smallest implemented slice
 
-- **Slice 1 (`4304dcf`)** — `runtime/prometheus.py`: `PrometheusClient` over an injected
+- **Slice 1 (`4304dcf`)**, `runtime/prometheus.py`: `PrometheusClient` over an injected
   `fetch` callable, `PrometheusLimits` (max response bytes, series, points per series),
   `PrometheusError` as the single message-free failure, and an `over_http` factory whose
   `urllib` read stops one byte past the size limit so an over-large body is never fully buffered.
-- **Slice 2** — `series_to_signals`: non-finite samples are dropped as gaps rather than coerced to
+- **Slice 2**, `series_to_signals`: non-finite samples are dropped as gaps rather than coerced to
   zero (ADR 0010), a series left with no finite point is dropped whole, and three cases fail
   closed as `PrometheusError`: an unnameable series, non-monotonic samples, and two series
   rendering one signal key (which `rank_metric_shifts` would reject as `DuplicateSignalError`).
-- **Slice 3** — `PrometheusTelemetrySource`: constructor validation, all selectors mapped in a
+- **Slice 3**, `PrometheusTelemetrySource`: constructor validation, all selectors mapped in a
   single `series_to_signals` call so cross-selector duplicates also fail closed,
   `asyncio.to_thread` for the blocking work, and `PrometheusError`/`DomainError` mapped to
   `TelemetryUnavailableError`, which the worker already treats as terminal and leakage-safe.
   Config adds `IEC_TELEMETRY=prometheus` plus `IEC_PROM_URL`, `IEC_PROM_QUERIES`,
   `IEC_PROM_STEP_SECONDS`, `IEC_PROM_TIMEOUT_SECONDS`, and `IEC_PROM_BEARER_TOKEN`.
 
-- **Slice 4** — the bundled demo and the first live run: `scripts/demo_anomaly_exporter.py` (a
+- **Slice 4**, the bundled demo and the first live run: `scripts/demo_anomaly_exporter.py` (a
   stdlib exporter that holds four services flat and then degrades `checkout` at a published
   `demo_injection_unixtime`), `demo/prometheus.yml` (5s scrape), a `demo` profile in
   `docker-compose.yml` (exporter + real Prometheus + the built image wired to
@@ -95,8 +95,8 @@ the baseline returned a `BaselineRanking`:
 
 The report came back `unknown` / `weak_evidence`. That is correct, not a defect:
 `FirstSignalLLMClient` names the lexicographically-first allowed signal, which here is
-`demo_error_ratio{...service="cart"}` — a flat signal scoring 0.29 against a
-`minimum_score` of 1.0 — so the verifier declined the guess. A wrong hypothesis about genuinely
+`demo_error_ratio{...service="cart"}`, a flat signal scoring 0.29 against a
+`minimum_score` of 1.0, so the verifier declined the guess. A wrong hypothesis about genuinely
 ingested data was refused.
 
 **Failure scenario, also live.** With `docker compose stop prometheus`, a submitted investigation
@@ -119,7 +119,7 @@ back **`unknown`/`weak_evidence`**. Counters: `iec_investigation_verdicts_total{
 The honest reading matters more than the verdict. Gemini sees only signal *names*, so naming
 `checkout` (and `payment`) is a plausible guess toward critical-sounding services, not a data-driven
 diagnosis. The injected fault was `checkout`, so the two `supported` predicates are verified true and
-the `payment` guess is correctly withheld. The verifier — not the model — is the source of truth:
+the `payment` guess is correctly withheld. The verifier, not the model, is the source of truth:
 this run shows it endorsing only what the live telemetry supports and withholding an unverified
 guess, the same guarantee the 2026-08-22 fake-client run showed from the refusal side.
 
@@ -149,7 +149,7 @@ docker compose --profile demo down -v
 Results: **335 tests, OK, 10 skipped** (PostgreSQL and live-Gemini integration tests);
 `ruff check` clean; `ruff format` clean; strict `mypy` clean over 89 source files;
 `project validation passed (full)`; `git diff --check` clean. `pyproject.toml` and `uv.lock` are
-byte-identical to `main` — no new runtime dependency, as ADR 0017 requires. Docker server 29.5.3,
+byte-identical to `main`, no new runtime dependency, as ADR 0017 requires. Docker server 29.5.3,
 `prom/prometheus:v3.6.0`.
 
 ## 8. What failed or changed
@@ -160,12 +160,12 @@ error messages.
 
 The Prometheus config tests were first written into `tests/test_runtime.py`, which put the port
 change and the adapter in one file and made a clean per-slice commit split impossible. They moved
-to `tests/test_prometheus.py`, so the whole Prometheus surface — client, mapper, source, and its
-config contract — is tested in one module.
+to `tests/test_prometheus.py`, so the whole Prometheus surface, client, mapper, source, and its
+config contract, is tested in one module.
 
 `PrometheusClient.over_http` had been *constructed* in tests but its `urllib` path had never run,
 because every other test injects `fetch`. A loopback `http.server` on an ephemeral port now
-exercises it for real — URL construction, the bearer header, status handling — and caught nothing
+exercises it for real, URL construction, the bearer header, status handling, and caught nothing
 functional but did surface a `mypy` finding: `server_address[0]` is `str | bytes`, so
 interpolating it into a URL is unsafe.
 
@@ -193,6 +193,6 @@ The README now lists this as a limitation and the roadmap as work.
 ## 10. Next question
 
 Two, now that ingestion demonstrably works. Should the API expose the baseline's ranking, not just
-the verified hypothesis — the live run needed a throwaway script to see the thing the system is
+the verified hypothesis, the live run needed a throwaway script to see the thing the system is
 best at? And should the PromQL selectors become per-tenant before v1 ships, or is the process-wide
 limitation acceptable for a single-tenant-per-process deployment?

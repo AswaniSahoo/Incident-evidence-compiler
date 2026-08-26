@@ -1,4 +1,4 @@
--- 0001_initial.sql — Phase 4 durable persistence boundary.
+-- 0001_initial.sql, Phase 4 durable persistence boundary.
 -- Every table is tenant-scoped; timestamps are timestamptz (domain canonicalizes to UTC).
 -- Applied by persistence.migrations.runner, which owns the schema_migrations bookkeeping.
 

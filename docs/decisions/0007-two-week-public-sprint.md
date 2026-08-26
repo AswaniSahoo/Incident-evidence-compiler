@@ -9,7 +9,7 @@ Aswani has a time-boxed external commitment in roughly two weeks that bounds ava
 
 ## Decision
 
-1. Execute the sprint per `MASTER-PLAN.md`: publish the repository publicly on Day 1 (build-in-public), then deliver persistence, the async provider boundary, the control plane + worker, real RCAEval RE2-OB evaluation, one sealed RE2-TT run, and OTel/Prometheus observability — behind the existing phase-gate validation, unchanged.
+1. Execute the sprint per `MASTER-PLAN.md`: publish the repository publicly on Day 1 (build-in-public), then deliver persistence, the async provider boundary, the control plane + worker, real RCAEval RE2-OB evaluation, one sealed RE2-TT run, and OTel/Prometheus observability, behind the existing phase-gate validation, unchanged.
 2. Select a public license on Day 1 and record it (separate ADR); publication is blocked until then per README.
 3. Scope cuts for v1, all moved to a v2 backlog rather than silently dropped: runbook RAG corpus and retrieval; Redis admission control; Grafana dashboard (Prometheus endpoint only); OIDC/RBAC depth (static bearer tokens + tenant-scoped queries remain); calibrated abstention with risk–coverage curve (existing typed abstention remains; no uncalibrated curve is published); SSE streaming; DELETE endpoint; astronomy-shop demo; RE2-SS.
 4. Slippage degrades scope via the MASTER-PLAN cut order; it never waives tests, leakage sanitation, sealed-test-set protocol, or documentation truthfulness.

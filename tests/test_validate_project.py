@@ -135,7 +135,7 @@ class PhasePolicyTests(unittest.TestCase):
 
     def write_context(self, phase: int) -> None:
         (validator.ROOT / "PROJECT_CONTEXT.md").write_text(
-            f"# Context\n\n## Current phase\n\nPhase {phase} — fixture.\n",
+            f"# Context\n\n## Current phase\n\nPhase {phase}, fixture.\n",
             encoding="utf-8",
         )
 
