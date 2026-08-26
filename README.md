@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-340_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-342_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
