@@ -1,4 +1,4 @@
-# Devlog 0017 — A divergent default, and the test that stops it recurring
+# Devlog 0017, a divergent default, and the test that stops it recurring
 
 Status: fixed on `main` in commit `fca8757` (2026-08-23). Recorded here after the fact, because the
 incident was worth a devlog of its own and originally had only a commit and a test docstring to show
