@@ -165,6 +165,13 @@ class Worker:
                 await self._terminal_fail(uow, claimed, started, failure.code)
             except _RetryableFailure as failure:
                 await self._retry_or_fail(uow, claimed, started, failure.code)
+            except Exception:
+                # The claim's ``attempt_count`` increment lives in this same transaction, so an
+                # untyped escape would roll it back with the work and return the job to QUEUED
+                # unchanged: ``max_attempts`` could never fire and the loop would reclaim the
+                # same poison job forever. Fail it closed instead, with a stable code and no
+                # exception text, matching the message-free boundary contract.
+                await self._terminal_fail(uow, claimed, started, "internal_error")
             else:
                 await uow.jobs.set_status(claimed.tenant, claimed.job_id, JobStatus.SUCCEEDED)
                 await self._record_attempt(uow, claimed, started, AttemptOutcome.SUCCEEDED, None)

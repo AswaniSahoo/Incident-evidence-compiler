@@ -106,6 +106,15 @@ class _RecordingTelemetrySource:
         return self._signals
 
 
+class _PoisonTelemetrySource:
+    """A port that fails with an *untyped* error, the shape that used to livelock the worker."""
+
+    async def load(
+        self, tenant: TenantId, incident: IncidentId, run: RunId, window: IncidentWindow
+    ) -> tuple[SignalBaselineInput, ...]:
+        raise RuntimeError("an unmapped infrastructure failure")
+
+
 class TelemetryPortContractTest(unittest.IsolatedAsyncioTestCase):
     """A live source needs the incident window, so the worker must hand it over (ADR 0017)."""
 
@@ -210,6 +219,21 @@ class ApplicationPipelineTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await worker.run_once())
         status = await GetInvestigationStatus(factory).execute(TenantId(_TENANT), investigation_id)
         self.assertEqual(status.status, InvestigationStatus.FAILED)
+
+    async def test_poison_job_fails_closed_instead_of_being_reclaimed_forever(self) -> None:
+        # The claim's attempt_count increment shares a transaction with the pipeline, so an
+        # untyped escape rolled it back and returned the job to QUEUED unchanged: max_attempts
+        # could never fire and the loop reclaimed the same job forever. It must fail closed.
+        factory = InMemoryUnitOfWorkFactory()
+        worker = Worker(
+            factory, FakeLLMClient([_proposal()]), _PoisonTelemetrySource(), worker_id="worker-1"
+        )
+        investigation_id = await CreateInvestigation(factory).execute(_command())
+        self.assertTrue(await worker.run_once())
+        status = await GetInvestigationStatus(factory).execute(TenantId(_TENANT), investigation_id)
+        self.assertEqual(status.status, InvestigationStatus.FAILED)
+        # The queue is now empty: the poison job was not returned for another attempt.
+        self.assertFalse(await worker.run_once())
 
     async def test_stalled_model_does_not_wedge_the_worker(self) -> None:
         factory = InMemoryUnitOfWorkFactory()
