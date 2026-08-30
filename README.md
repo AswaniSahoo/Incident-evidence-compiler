@@ -20,6 +20,35 @@ The whole thing is built the way I'd build a real backend: framework-independent
 PostgreSQL as the source of truth, a `SKIP LOCKED` worker queue, every external call on a
 deadline, and a test suite that runs with no database, no network, and no credentials.
 
+## The system refusing a plausible answer
+
+**Live run, 2026-08-23.** A fault is injected into `bank_router`, shaped like a bad deploy.
+`ledger_db` is a healthy decoy: a database-shaped signal a model is tempted to blame. Gemini sees
+only signal *names*, never values, and proposed one hypothesis over four predicates. The
+deterministic verifier resolved each against the ingested evidence ledger:
+
+| Predicate Gemini proposed | Verdict | Grounds |
+|---|---|---|
+| `bank_router_latency_increase` | **`SUPPORTED`** | evidence `sha256:758e1134...`, the injected fault |
+| `checkout_error_increase` | `UNKNOWN` | `weak_evidence`, checkout never moved |
+| `ledger_db_error_increase` | `UNKNOWN` | `weak_evidence`, **the decoy, refused** |
+| `upi_switch_latency_increase` | `UNKNOWN` | `weak_evidence`, never moved |
+
+**One verified true. Three guesses withheld. Zero false assertions.** The one it got right was a
+guess too: it cannot see a single value. The difference is that the verifier could check that one
+against the ledger and could not check the other three. The model was wrong three times out of four
+and the system was still right, because being wrong never became a conclusion.
+
+Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-synthetic-data).
+
+> [!NOTE]
+> **The telemetry in this demo is synthetic.** It comes from
+> [an exporter in this repo](scripts/demo_anomaly_exporter.py) that says so in its own docstring.
+> The run is otherwise real end to end: a real Prometheus v3.6.0 range query, a real worker, a real
+> Vertex `gemini-2.5-flash` call, and the real deterministic verifier. It proves the ingestion path
+> and the verification gate. It does **not** prove diagnostic accuracy on production payment
+> telemetry, and nothing here claims that it does.
+
 ## Results
 
 Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
