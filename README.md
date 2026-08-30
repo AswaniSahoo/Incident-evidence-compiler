@@ -84,6 +84,33 @@ If you read one section, read this one. Every item links to the code or the arti
   model-generated SQL, shell access, autonomous remediation, and multi-agent orchestration.
   [`docs/decisions/`](docs/decisions/)
 
+## How this was built
+
+Solo, with AI agents doing implementation work under a written contract, and every architectural
+call made by me.
+
+The contract is in the repository, not in my head. [`AGENTS.md`](AGENTS.md) is the operating
+agreement: one vertical slice at a time, acceptance criteria before implementation, domain code kept
+independent of frameworks, model output treated as untrusted everywhere, and no fake metrics or
+unverified completion claims. [`.kiro/steering/`](.kiro/steering/) holds the standing engineering
+rules that apply to every task.
+
+Enforcement is mechanical rather than aspirational.
+[`scripts/validate_project.py`](scripts/validate_project.py) checks the governance invariants and
+must pass before any phase commit, and [`.kiro/hooks/project_hook.py`](.kiro/hooks/project_hook.py)
+blocks disallowed actions at the tool boundary. Both are themselves covered by tests
+([`test_validate_project.py`](tests/test_validate_project.py),
+[`test_project_hook.py`](tests/test_project_hook.py)), because a rule nobody checks is only a
+preference.
+
+Every significant decision is an ADR that records the rejected options and why they lost. Every
+phase closes with a devlog carrying the commands and their actual output, including the runs that
+went badly. 19 ADRs, 18 devlogs.
+
+The shape may look familiar. It is the same one as the product: a capable generator proposes,
+a deterministic layer decides what counts, and nothing is accepted because it merely sounds right.
+I built the system this way because I was working this way.
+
 ## Results
 
 Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
