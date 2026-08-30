@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-08-23
+Last verified: 2026-08-30
 
 ## Current phase
 
@@ -26,8 +26,22 @@ setting (the immediate driver is the Razorpay AI Buildathon, Open Track; applica
 2026-09-05), without moving the frozen domain or faking a vendor integration. The reskin is
 confined to demo artifacts (exporter signal names, `IEC_PROM_QUERIES`, driver label, README, ADR
 0018, devlog 0013); the data stays synthetic and labelled. The durability evidence (devlog 0014)
-and the baseline-ranking API (ADR 0019, devlog 0015) are both done on `main`; the only remaining
-Buildathon item is the 5-minute pitch video.
+and the baseline-ranking API (ADR 0019, devlog 0015) are both done on `main`.
+
+Hardening pass, 2026-08-30, after an external senior-engineer review. Boundary fuzzing added
+(devlog 0016): 3,000 generated hostile inputs assert that only typed `LLMValidationError` and
+`PrometheusError` ever escape the untrusted LLM and telemetry boundaries. The harness initially
+passed while covering the allow-list branch zero times out of 1,500 cases, which the outcome
+distribution exposed; a hallucinated-signal strategy took that branch to 133 hits. Em-dashes were
+removed repo-wide (263 across 49 files) and two stale README claims corrected. Devlog 0017 records
+the divergent default-model incident so the Buildathon "what broke" answer links to a published
+artifact. The README now leads with the verifier refusing a plausible answer, as a table rather than
+a Mermaid block, so nothing above the fold depends on GitHub's diagram renderer.
+
+**The only remaining Buildathon item is the 5-minute pitch video.** The script, screen direction,
+form answer and production plan are written in the gitignored `docs/learning/`. Note: `mermaid-cli`
+cannot pre-render diagrams on this machine (puppeteer fails to launch Chromium), so the two Mermaid
+blocks stay inline and unrendered; they sit below the fold and are not load-bearing.
 
 ## Product
 
