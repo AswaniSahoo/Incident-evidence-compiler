@@ -31,7 +31,7 @@ from ..observability import MetricsRegistry
 from ..persistence import InvestigationId, UnitOfWorkFactory
 from ..persistence.errors import InvalidPersistenceIdentifierError
 from .auth import TokenRegistry
-from .models import CreateInvestigationRequest
+from .models import MAX_IDENTIFIER_LENGTH, CreateInvestigationRequest
 
 
 def _investigation_id(raw: str) -> InvestigationId:
@@ -86,6 +86,12 @@ def create_app(
         tenant: Annotated[TenantId, Depends(authenticate)],
         idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     ) -> dict[str, str]:
+        if idempotency_key is not None and (
+            not idempotency_key.strip() or len(idempotency_key) > MAX_IDENTIFIER_LENGTH
+        ):
+            # The persistence record rejects a blank key with a PersistenceValidationError,
+            # which is not a DomainValidationError and so escaped the handler below as a 500.
+            raise HTTPException(status_code=422, detail={"code": "invalid_idempotency_key"})
         try:
             command = CreateInvestigationCommand(
                 tenant=tenant,

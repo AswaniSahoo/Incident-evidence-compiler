@@ -175,6 +175,31 @@ class ControlPlaneTest(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(response.status_code, 422)
 
+    async def test_blank_idempotency_key_returns_422_not_500(self) -> None:
+        # A blank key reaches InvestigationRecord, which raises PersistenceValidationError.
+        # That is not a DomainValidationError, so it escaped the route handler as a 500.
+        for key in ("", "   "):
+            async with _client(self.app) as client:
+                response = await client.post(
+                    "/investigations",
+                    json=_create_body(),
+                    headers={"Authorization": "Bearer tok-a", "Idempotency-Key": key},
+                )
+            self.assertEqual(response.status_code, 422)
+            self.assertEqual(response.json(), {"code": "invalid_idempotency_key"})
+
+    async def test_oversized_identifiers_are_rejected_before_reaching_the_prompt(self) -> None:
+        # incident_id and run_id are interpolated verbatim into the LLM prompt, so an uncapped
+        # value is a cost-amplification lever for any authenticated tenant.
+        body = _create_body()
+        body["incident_id"] = "x" * 5000
+        async with _client(self.app) as client:
+            response = await client.post(
+                "/investigations", json=body, headers={"Authorization": "Bearer tok-a"}
+            )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json(), {"code": "invalid_request"})
+
     async def test_health_stays_responsive_while_worker_is_stalled(self) -> None:
         self.telemetry.set(TenantId(_TENANT), IncidentId(_INCIDENT), RunId(_RUN), _signals())
         async with _client(self.app) as client:
