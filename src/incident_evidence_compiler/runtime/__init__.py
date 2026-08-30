@@ -20,7 +20,7 @@ from .server import (
     main,
     run_worker_loop,
 )
-from .telemetry import RcaevalTelemetrySource
+from .telemetry import RcaevalTelemetrySource, opaque_case_id
 
 __all__ = [
     "AppConfig",
@@ -35,5 +35,6 @@ __all__ = [
     "build_components",
     "create_server_app",
     "main",
+    "opaque_case_id",
     "run_worker_loop",
 ]

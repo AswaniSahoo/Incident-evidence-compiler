@@ -24,6 +24,7 @@ from incident_evidence_compiler.runtime import (
     ServerComponents,
     build_components,
     create_server_app,
+    opaque_case_id,
     run_worker_loop,
 )
 
@@ -125,12 +126,26 @@ class RcaevalTelemetrySourceTests(unittest.IsolatedAsyncioTestCase):
     def test_indexes_fixture_cases_without_touching_ground_truth(self) -> None:
         source = RcaevalTelemetrySource(_FIXTURE_ROOT, split="OB")
         self.assertTrue(source.available)
-        # Keys are the case directory paths (never a scored label object).
-        self.assertTrue(any("CANARY" in key for key in source.available))
+        # Keys are opaque digests, never the case directory path. A RE2 directory is named
+        # ``<service>_<fault>`` and the served incident id reaches the LLM prompt verbatim, so
+        # keying by the locator would put ground-truth fault metadata in model context.
+        self.assertTrue(all(key.startswith("case-") for key in source.available))
+        self.assertFalse(any("CANARY" in key for key in source.available))
+        # The case stays reachable for an operator, just not through anything the model sees.
+        self.assertTrue(
+            any("CANARY" in (source.locator_for(key) or "") for key in source.available)
+        )
+
+    def test_opaque_case_id_is_deterministic_and_hides_the_fault_label(self) -> None:
+        locator = "some/path/cartservice_cpu/1"
+        self.assertEqual(opaque_case_id(locator), opaque_case_id(locator))
+        self.assertNotIn("cartservice", opaque_case_id(locator))
+        self.assertNotIn("cpu", opaque_case_id(locator))
+        self.assertNotEqual(opaque_case_id(locator), opaque_case_id("some/path/cartservice_mem/1"))
 
     async def test_load_returns_inputs_for_known_case_and_raises_for_unknown(self) -> None:
         source = RcaevalTelemetrySource(_FIXTURE_ROOT, split="OB")
-        incident_key = next(key for key in source.available if "CANARY" in key)
+        incident_key = _canary_incident(source)
         window = source.available[incident_key]
         # The window is part of the port (ADR 0017); a pre-indexed source accepts and ignores it.
         inputs = await source.load(
@@ -142,7 +157,7 @@ class RcaevalTelemetrySourceTests(unittest.IsolatedAsyncioTestCase):
 
 
 def _canary_incident(source: RcaevalTelemetrySource) -> str:
-    return next(key for key in source.available if "CANARY" in key)
+    return next(key for key in source.available if "CANARY" in (source.locator_for(key) or ""))
 
 
 class BuildComponentsTests(unittest.IsolatedAsyncioTestCase):
