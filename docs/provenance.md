@@ -25,4 +25,4 @@ The audit exposed useful failure cases: model-generated SQL crossing approval bo
 
 ## Publication status
 
-A license for this independently authored repository has not yet been selected. Public publication waits for a recorded license decision.
+This repository is public and licensed Apache-2.0, decided in ADR 0008 on 2026-07-17. See [`LICENSE`](../LICENSE) and [ADR 0008](decisions/0008-apache-2.0-license.md). RCAEval dataset licensing is separate and documented in [`docs/datasets/rcaeval-re2.md`](datasets/rcaeval-re2.md); the raw benchmark data is never committed.
