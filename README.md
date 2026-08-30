@@ -49,6 +49,41 @@ Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-syn
 > and the verification gate. It does **not** prove diagnostic accuracy on production payment
 > telemetry, and nothing here claims that it does.
 
+## What is actually interesting here
+
+If you read one section, read this one. Every item links to the code or the artifact behind it.
+
+- **The model physically cannot say anything dangerous.** Gemini returns fixed JSON: a signal id
+  drawn from a caller-supplied allow-list, `INCREASE` or `DECREASE`, `ALL` or `ANY`. There is no
+  field for free text, for SQL, or for a shell command.
+  [`llm/parsing.py`](src/incident_evidence_compiler/llm/parsing.py) caps untrusted input at 65,536
+  characters and 32 predicates *before* parsing, checks every signal against the allow-list *after*
+  structural validation, and raises message-free typed errors, so no model-derived string is ever
+  retained or echoed back.
+- **Evidence is content-addressed.** Each ledger entry's ID is a sha256 over its own content, so a
+  citation cannot drift from the thing it cites, and a report replays byte for byte.
+  [`domain/evidence/`](src/incident_evidence_compiler/domain/evidence/)
+- **`UNKNOWN` is a verdict, not a failure.** Tenant or run mismatch, causal claims, and weak
+  evidence all fail closed to `UNKNOWN` rather than collapsing to "no."
+  [`domain/verifier.py`](src/incident_evidence_compiler/domain/verifier.py)
+- **Malformed telemetry cannot exist as a domain object.** `NaN`, infinities, and non-monotonic
+  timestamps are rejected in `__post_init__`, so no downstream code has to remember to check for
+  them. [`domain/metrics.py`](src/incident_evidence_compiler/domain/metrics.py)
+- **The untrusted boundaries are fuzzed, and the fuzzer itself was audited.** 3,000 generated
+  hostile inputs assert that only typed errors ever escape. The first version passed while covering
+  the allow-list branch zero times out of 1,500 cases; measuring the outcome distribution exposed
+  that, and a hallucinated-signal strategy took it to 133.
+  [`tests/test_fuzz_boundaries.py`](tests/test_fuzz_boundaries.py),
+  [devlog 0016](docs/devlog/0016-boundary-fuzzing-and-hygiene.md)
+- **The job queue is real.** `SELECT ... FOR UPDATE SKIP LOCKED` with leases, retries and idempotent
+  commits, verified against a real `postgres:16` by a two-worker race test.
+  [devlog 0014](docs/devlog/0014-postgres-skip-locked-evidence.md)
+- **The evaluation was sealed.** RE2-TT was opened exactly once, against a frozen commit, with no
+  tuning against it. [Protocol](docs/evaluation/re2-tt-sealed-protocol.md)
+- **19 ADRs record what was cut, and why**, including what was deliberately *not* built:
+  model-generated SQL, shell access, autonomous remediation, and multi-agent orchestration.
+  [`docs/decisions/`](docs/decisions/)
+
 ## Results
 
 Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
@@ -333,6 +368,41 @@ docker compose --profile demo down -v
 The driver reads the exporter's own `demo_injection_unixtime` so the incident window straddles the
 fault exactly instead of by guesswork, waits for Prometheus to scrape both sides, then submits one
 investigation and polls for the verified report.
+
+This is what it printed on 2026-08-23, verbatim, running against Vertex `gemini-2.5-flash`:
+
+```console
+$ uv run --locked python scripts/demo_live_investigation.py
+waiting for the demo stack
+  exporter ready at http://127.0.0.1:9101/metrics
+  compiler ready at http://127.0.0.1:8000/health
+injection at 2026-08-23T10:12:11Z; window 2026-08-23T10:10:11Z .. 2026-08-23T10:14:11Z
+investigation 2c93d390-8d92-4109-bab3-d490de5fefc9 accepted; polling for the report
+
+verdict: supported
+  checkout_error_increase: unknown observed=increase supporting=0 contradicting=0
+  bank_router_latency_increase: supported observed=increase supporting=1 contradicting=0
+  ledger_db_error_increase: unknown observed=decrease supporting=0 contradicting=0
+  upi_switch_latency_increase: unknown observed=decrease supporting=0 contradicting=0
+```
+
+The `supporting=1` on the one accepted predicate is a cited evidence ID, not a confidence score.
+Pulled from the same report:
+
+```json
+{
+  "predicate_id": "bank_router_latency_increase",
+  "verdict": "supported",
+  "observed_direction": "increase",
+  "supporting_evidence_ids": [
+    "sha256:758e1134587717a172b0a90bc4d5b5ab21986d5cd49d18996645f4f03cb98f5f"
+  ],
+  "reason": null
+}
+```
+
+That hash addresses the exact ledger entry the verdict rests on. Look it up and you get the same
+bytes the verifier read.
 
 **With a real model (2026-08-23).** Run with `IEC_LLM_PROVIDER=vertex` (`gemini-2.5-flash` on a
 dedicated GCP project, ADC only, no credential in any container). Gemini, which sees only signal
