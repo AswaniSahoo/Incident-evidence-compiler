@@ -46,9 +46,9 @@ resolved each against the ingested ledger:
 | Predicate | Verdict | Evidence |
 |---|---|---|
 | `bank_router_latency_increase` | **`supported`** | `sha256:758e1134…` |
-| `checkout_error_increase` | `unknown` (`weak_evidence`) |, |
-| `ledger_db_error_increase` | `unknown` (`weak_evidence`, observed `decrease`) |, the decoy |
-| `upi_switch_latency_increase` | `unknown` (`weak_evidence`, observed `decrease`) |, |
+| `checkout_error_increase` | `unknown` (`weak_evidence`) | none |
+| `ledger_db_error_increase` | `unknown` (`weak_evidence`, observed `decrease`) | none, the decoy |
+| `upi_switch_latency_increase` | `unknown` (`weak_evidence`, observed `decrease`) | none |
 
 `iec_investigation_verdicts_total{verdict="supported"} 1`; one succeeded job; no traceback. **One
 verified-true, three guesses withheld, zero false assertions.** The model over-reached four ways,
