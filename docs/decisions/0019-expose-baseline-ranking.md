@@ -9,8 +9,8 @@
 
 ## Context
 
-The deterministic baseline is the system's most accurate component, on RE2-OB it reaches Top-1
-0.767 against the verifier-gated LLM arm's 0.156, yet the HTTP API exposes only the *verified
+The deterministic baseline is the system's most accurate component, on held-out RE2-TT it reaches
+Top-1 0.767 against the verifier-gated LLM arm's 0.156, yet the HTTP API exposes only the *verified
 hypothesis*, never the ranking. Both live demos made this concrete: the baseline ranked the faulty
 signal first by a wide margin, but the only way to see it was a throwaway inspection script.
 Devlogs 0012 and 0013 both close on exactly this question.
