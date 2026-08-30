@@ -10,7 +10,7 @@ ranking as an additive nullable `baseline_ranking` field) are **accepted and mer
 (PR #5 plus direct commits). ADR 0018 reskins the ADR 0017 profile into a bank-router deploy
 incident (`bank_router` faulty, `ledger_db` a deliberate healthy decoy) with no domain, port, or
 verifier change; ADR 0019 persists the ranking additively (migration `0002`, verification schema
-untouched). The full locked gate is green (342 tests), and the Postgres `SKIP LOCKED` durability
+untouched). The full locked gate is green (346 tests), and the Postgres `SKIP LOCKED` durability
 suite was verified against `postgres:16` (devlog 0014).
 A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
 ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned

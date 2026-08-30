@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-342_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-346_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
@@ -84,33 +84,6 @@ If you read one section, read this one. Every item links to the code or the arti
   model-generated SQL, shell access, autonomous remediation, and multi-agent orchestration.
   [`docs/decisions/`](docs/decisions/)
 
-## How this was built
-
-Solo, with AI agents doing implementation work under a written contract, and every architectural
-call made by me.
-
-The contract is in the repository, not in my head. [`AGENTS.md`](AGENTS.md) is the operating
-agreement: one vertical slice at a time, acceptance criteria before implementation, domain code kept
-independent of frameworks, model output treated as untrusted everywhere, and no fake metrics or
-unverified completion claims. [`.kiro/steering/`](.kiro/steering/) holds the standing engineering
-rules that apply to every task.
-
-Enforcement is mechanical rather than aspirational.
-[`scripts/validate_project.py`](scripts/validate_project.py) checks the governance invariants and
-must pass before any phase commit, and [`.kiro/hooks/project_hook.py`](.kiro/hooks/project_hook.py)
-blocks disallowed actions at the tool boundary. Both are themselves covered by tests
-([`test_validate_project.py`](tests/test_validate_project.py),
-[`test_project_hook.py`](tests/test_project_hook.py)), because a rule nobody checks is only a
-preference.
-
-Every significant decision is an ADR that records the rejected options and why they lost. Every
-phase closes with a devlog carrying the commands and their actual output, including the runs that
-went badly. 19 ADRs, 18 devlogs.
-
-The shape may look familiar. It is the same one as the product: a capable generator proposes,
-a deterministic layer decides what counts, and nothing is accepted because it merely sounds right.
-I built the system this way because I was working this way.
-
 ## Results
 
 Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
@@ -122,13 +95,14 @@ row). Metrics are aggregate and label-free; the raw artifacts live in
 | Baseline (deterministic) | **0.932** | **0.989** | **0.959** | 0.000 | 0 |
 | + Gemini (`gemini-2.5-flash`, verified) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | 0 |
 
-Here's the honest part, because it's the interesting part. The deterministic baseline sees the
-actual metric values and localizes the faulty service well. The Gemini arm is handed only the
-signal *names*, never the values, so it's guessing among ~72 signals, and it often names a
-downstream symptom instead of the cause. It does badly. That's fine. The point of the system is
-that the verifier gates those guesses: the model abstained or got filtered half the time, and it
-produced **zero** invalid evidence citations. The LLM can be wrong without the system being
-wrong.
+Read those two rows as a bracket, not a race. The baseline row is the localization the report
+actually carries: it sees the metric values and finds the faulty service. The Gemini row is a
+deliberate stress test of the verification gate. The model is handed signal *names* only, never a
+value, so it is guessing among ~72 signals, and it often names a downstream symptom instead of the
+cause. That is close to the worst generator you could wire in, which is the point: the columns that
+measure the gate are abstention and invalid evidence IDs. It abstained or was filtered on half the
+cases and produced **zero** invalid citations. Handing the model the values would raise its Top-1
+and prove nothing about the gate.
 
 ### Held-out (sealed RE2-TT)
 
@@ -532,6 +506,22 @@ tests/            # hermetic unit/integration tests (fakes + deterministic LLM)
 docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, architecture
 ```
 
+## How this was built
+
+Solo, with AI agents doing implementation work under a written contract, and every architectural
+call made by me.
+
+The contract is in the repository, not in my head. [`AGENTS.md`](AGENTS.md) and
+[`.kiro/steering/`](.kiro/steering/) hold the rules: one vertical slice at a time, acceptance
+criteria before implementation, model output untrusted everywhere, no unverified completion claims.
+Enforcement is mechanical, not aspirational.
+[`scripts/validate_project.py`](scripts/validate_project.py) must pass before any phase commit, and
+[`.kiro/hooks/project_hook.py`](.kiro/hooks/project_hook.py) blocks disallowed actions at the tool
+boundary. Both are themselves tested, because a rule nobody checks is only a preference.
+
+The shape is the same one as the product: a capable generator proposes, a deterministic layer
+decides what counts, and nothing is accepted because it merely sounds right.
+
 ## Principles (the ones I actually held)
 
 - Write the contracts before the orchestration.
@@ -565,6 +555,14 @@ I'd rather list this plainly than let you find it the hard way.
   latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
   OpenTelemetry spans and cost estimation are deferred.
 - **The baseline policy is a sensible default,** not a calibrated risk-coverage curve.
+- **The served verifier threshold is looser than the evaluated one.** The worker runs
+  `minimum_score=1.0` ([`application/worker.py`](src/incident_evidence_compiler/application/worker.py));
+  the benchmark ran `3.0`
+  ([`evaluation/harness/baseline_inputs.py`](src/incident_evidence_compiler/evaluation/harness/baseline_inputs.py)),
+  and there is no environment override yet. So the demo above is not run at the configuration the
+  Results tables were measured at, and a verdict there is not directly comparable to those numbers.
+  The policy is serialized into every report's `baseline_ranking.policy`, so you can always read
+  which one produced a given result.
 - **Single-node Postgres queue.** Redis admission control is deferred (ADR 0007).
 
 ## Roadmap
