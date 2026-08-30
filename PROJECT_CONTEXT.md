@@ -140,18 +140,20 @@ full pass), plus a container build and smoke test:
 
 ## Next action
 
-Merge `feat/prometheus-telemetry` → `main` (PR, build-in-public) and push, Aswani runs the push
-(automated shell pushes stay disabled). Then the immediate goal is the **Razorpay AI Buildathon**
-(Open Track): the repo, ADRs, sealed held-out metrics, and the live Vertex run already satisfy the
-"public repo + architecture docs + honest metrics + working, not prototype" bar; the one net-new
-artifact is a **5-minute pitch video**. Positioning notes: `docs/learning/razorpay-buildathon.md`
-(private).
+The immediate goal is the **Razorpay AI Buildathon** (Open Track, applications close 2026-09-05):
+the repo, ADRs, sealed held-out metrics, and the live Vertex run already satisfy the "public repo +
+architecture docs + honest metrics + working, not prototype" bar; the one net-new artifact is a
+**5-minute pitch video**. Positioning notes: `docs/learning/razorpay-buildathon.md` (private).
 
-Deferred (README roadmap / backlog, not blockers): exposing the baseline ranking through HTTP (the
-demo localized the fault cleanly but that ranking is invisible over the API); process-wide vs
-per-tenant PromQL selectors; and a refactor so the production path stops importing
-`evaluation.harness.baseline_inputs` for the scale-floor policy (ADR 0017 item 5 sanctions the
-current import).
+Two items this file previously listed as pending are done: `feat/prometheus-telemetry` merged to
+`main` at `bd1bb64` (PR #4), and ADR 0019 shipped the `baseline_ranking` field (migration `0002`,
+serializer `baseline-ranking.v1`, `api/app.py`).
+
+Deferred (README roadmap / backlog, not blockers): surfacing `baseline_ranking` where a reader can
+see it, the field ships over HTTP but `scripts/demo_live_investigation.py` never prints it and the
+README API section never documents it; process-wide vs per-tenant PromQL selectors; and a refactor
+so the production path stops importing `evaluation.harness.baseline_inputs` for the scale-floor
+policy (ADR 0017 item 5 sanctions the current import).
 
 ### Earlier, still true
 
