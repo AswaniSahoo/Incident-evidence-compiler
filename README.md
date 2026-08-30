@@ -323,11 +323,11 @@ open routes.
 
 | Method & path | Purpose | Success | Notable errors |
 |---|---|---|---|
-| `GET /health` | Liveness (open) | `200 {"status":"ok"}` |, |
-| `GET /metrics` | Prometheus text (open, no tenant/PII labels) | `200 text/plain` |, |
+| `GET /health` | Liveness (open) | `200 {"status":"ok"}` | none |
+| `GET /metrics` | Prometheus text (open, no tenant/PII labels) | `200 text/plain` | none |
 | `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401`, `422 <code>` |
 | `GET /investigations/{id}` | Status | `200 {"investigation_id","status"}` | `401`, `404 investigation_not_found` |
-| `GET /investigations/{id}/report` | Verified report | `200 {...,"report":{...}}` | `404`, `409 report_not_ready` |
+| `GET /investigations/{id}/report` | Verified report + baseline ranking | `200 {...,"report":{...},"baseline_ranking":{...}}` | `404`, `409 report_not_ready` |
 
 `POST /investigations` body:
 
@@ -348,7 +348,7 @@ The report you get back is the verification result:
 ```json
 {
   "investigation_id": "…",
-  "schema_version": "metric-shift-verification.v1",
+  "schema_version": "metric-hypothesis-verification.v1",
   "report": {
     "hypothesis_id": "…",
     "composition": "any",
@@ -364,9 +364,28 @@ The report you get back is the verification result:
       }
     ],
     "supporting_evidence_ids": ["…"]
+  },
+  "baseline_ranking": {
+    "schema_version": "baseline-ranking.v1",
+    "kind": "ranking",
+    "abstention_reason": null,
+    "policy": { "minimum_score": "…", "minimum_margin": "…", "…": "…" },
+    "candidates": [
+      { "signal_key": "…", "suspicion_score": "…", "pre_median": "…", "post_median": "…", "…": "…" }
+    ],
+    "top_score": "…",
+    "second_score": "…",
+    "lead": "…"
   }
 }
 ```
+
+`baseline_ranking` (ADR 0019) is the deterministic engine's own answer, carried beside the verified
+hypothesis rather than inside it: candidates sorted by descending suspicion score, the policy that
+produced them, and the lead over the runner-up. `kind` is `"ranking"` or `"abstention"`. It is
+derived only from ingested telemetry, so it carries no fault labels and no model text, and it is
+`null` for reports written before migration `0002`. Every float in this payload is a `float.hex()`
+string, not a JSON number, so a report round-trips bit-for-bit.
 
 Every error body is a flat `{"code": "<stable_code>"}`. No model text, no tenant data, no
 internals cross the boundary.
@@ -545,13 +564,12 @@ I'd rather list this plainly than let you find it the hard way.
 - **Metrics, but no tracing.** There's a dependency-free Prometheus `/metrics` endpoint (per-stage
   latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
   OpenTelemetry spans and cost estimation are deferred.
-- **The baseline policy is a sensible default,** not a calibrated risk–coverage curve.
+- **The baseline policy is a sensible default,** not a calibrated risk-coverage curve.
 - **Single-node Postgres queue.** Redis admission control is deferred (ADR 0007).
 
 ## Roadmap
 
-- Make the Prometheus selectors per-tenant instead of process-wide, expose the baseline's ranking
-  through the API (the live demo had to be inspected out of band), and split the worker into its
+- Make the Prometheus selectors per-tenant instead of process-wide, and split the worker into its
   own process.
 - Make the evaluation harness stream cases (score-one-discard-one) so the full RE2-TT split runs
   without holding all cases in memory, the sealed run currently needs the whole split resident.
