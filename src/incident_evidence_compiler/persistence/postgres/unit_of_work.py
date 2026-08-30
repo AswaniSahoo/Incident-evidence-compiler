@@ -213,8 +213,8 @@ class _InvestigationRepository:
                     params,
                 )
                 row = await cursor.fetchone()
-        except errors.UniqueViolation as exc:
-            raise IdempotencyConflictError from exc
+        except errors.UniqueViolation:
+            raise IdempotencyConflictError from None
         assert row is not None
         return _investigation(row)
 
@@ -272,8 +272,8 @@ class _JobQueue:
                     params,
                 )
                 row = await cursor.fetchone()
-        except errors.UniqueViolation as exc:
-            raise IdempotencyConflictError from exc
+        except errors.UniqueViolation:
+            raise IdempotencyConflictError from None
         assert row is not None
         return _job(row)
 
@@ -362,8 +362,8 @@ class _AttemptRepository:
                     params,
                 )
                 row = await cursor.fetchone()
-        except errors.UniqueViolation as exc:
-            raise IdempotencyConflictError from exc
+        except errors.UniqueViolation:
+            raise IdempotencyConflictError from None
         assert row is not None
         return _attempt(row)
 
@@ -452,8 +452,8 @@ class _ReportRepository:
                     params,
                 )
                 row = await cursor.fetchone()
-        except errors.UniqueViolation as exc:
-            raise IdempotencyConflictError from exc
+        except errors.UniqueViolation:
+            raise IdempotencyConflictError from None
         assert row is not None
         return _report(row)
 
