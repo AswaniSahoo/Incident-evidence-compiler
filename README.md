@@ -94,15 +94,15 @@ row). Metrics are aggregate and label-free; the raw artifacts live in
 |---|---|---|---|---|---|
 | Baseline (deterministic) | **0.932** | **0.989** | **0.959** | 0.000 | 0 |
 | + Gemini (`gemini-2.5-flash`, verified) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | 0 |
+| + Gemini (`gemini-3.7-flash`, verified) | 0.068 (0.125 answered) | 0.068 | 0.068 | 0.455 | 0 |
 
-Read those two rows as a bracket, not a race. The baseline row is the localization the report
-actually carries: it sees the metric values and finds the faulty service. The Gemini row is a
-deliberate stress test of the verification gate. The model is handed signal *names* only, never a
-value, so it is guessing among ~72 signals, and it often names a downstream symptom instead of the
-cause. That is close to the worst generator you could wire in, which is the point: the columns that
-measure the gate are abstention and invalid evidence IDs. It abstained or was filtered on half the
-cases and produced **zero** invalid citations. Handing the model the values would raise its Top-1
-and prove nothing about the gate.
+Read those rows as a bracket, not a race. The baseline row is the localization the report actually
+carries: it sees the metric values and finds the faulty service. The two Gemini rows are a
+deliberate stress test of the verification gate across model generations. Both models are handed
+signal *names* only, never a value, so they are guessing among ~72 signals. The two-generation-newer
+3.7 Flash (with thinking) does not improve on 2.5 Flash when the input is deliberately impoverished,
+which is the point: the column that matters is invalid evidence IDs. **Zero across both models.**
+Handing the model the values would raise its Top-1 and prove nothing about the gate.
 
 ### Held-out (sealed RE2-TT)
 
@@ -442,6 +442,34 @@ ways; the verifier endorsed only the single claim real evidence supported, inclu
 tempting `ledger_db` decoy. That is the whole thesis in one report: the LLM is allowed to guess,
 only deterministic code is allowed to decide, and being wrong three times out of four costs nothing
 because none of it became a conclusion.
+
+**Same system, different day (2026-08-31).** A second Vertex run produced a completely different
+hypothesis. This time `gemini-2.5-flash` named the wrong component entirely:
+
+```console
+$ uv run --locked python scripts/demo_live_investigation.py
+waiting for the demo stack
+  exporter ready at http://127.0.0.1:9101/metrics
+  compiler ready at http://127.0.0.1:8000/health
+injection at 2026-08-30T22:10:59Z; window 2026-08-30T22:08:59Z .. 2026-08-30T22:12:59Z
+investigation f78837fe-ae04-4881-af0e-69a847453e22 accepted; polling for the report
+
+verdict: unknown
+  checkout_errors_increased: unknown observed=increase supporting=0 contradicting=0
+  checkout_latency_increased: unknown observed=increase supporting=0 contradicting=0
+```
+
+| Predicate Gemini proposed | Verdict | Grounds |
+|---|---|---|
+| `checkout_errors_increased` | **`unknown`** | `weak_evidence`, checkout was not the faulty component |
+| `checkout_latency_increased` | **`unknown`** | `weak_evidence`, checkout was not the faulty component |
+
+**Zero verified-true, two guesses withheld, zero false assertions.** The model focused on `checkout`
+and never mentioned `bank_router`. The verifier blocked everything. Meanwhile the deterministic
+`baseline_ranking` in the same report independently placed both `bank_router` signals at the top
+(suspicion scores `0x1.43…p+4` and `0x1.23…p+4`), an order of magnitude above the rest. The model
+was completely wrong; the system produced no false conclusions; the baseline engine found the fault
+without any model at all. That is a stronger test of the architecture than the first run.
 
 **Without a model at all.** The same run with `IEC_LLM_PROVIDER=fake` (a smoke client needing no
 API, which names the lexicographically-first ingested signal, here `bank_router`'s error ratio)
