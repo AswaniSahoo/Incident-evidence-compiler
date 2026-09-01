@@ -33,6 +33,9 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+# The script directory is not on sys.path under PYTHONSAFEPATH=1, ``python -P`` or ``python -I``.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from _demo_common import format_baseline_ranking, format_predicates
 
 from incident_evidence_compiler.domain.identifiers import IncidentId, RunId, TenantId
@@ -48,10 +51,19 @@ BANNER = (
     " telemetry: committed synthetic fixture;"
     " the API, worker, evidence ledger and verifier are the real ones"
 )
-HEALTH_ATTEMPTS = 60
-REPORT_ATTEMPTS = 60
+# Wall-clock budgets, not attempt counts, so the whole run is bounded (about 75 s worst case
+# including shutdown) and always finishes before the end-to-end test's timeout kills it. If the
+# test killed the driver first, the driver's cleanup would never run and the server it started
+# would be orphaned on its port.
+HEALTH_DEADLINE_SECONDS = 15.0
+REPORT_DEADLINE_SECONDS = 30.0
 POLL_SECONDS = 0.5
 LOG_TAIL_LINES = 20
+# Anything the operator exported for their own IEC deployment must not leak into the demo: an
+# ambient IEC_WORKER_ENABLED=false or IEC_BASELINE_MIN_SCORE would silently change what a reader
+# sees. Only the variables set below reach the child.
+_STRIPPED_PREFIXES = ("IEC_",)
+_STRIPPED_KEYS = frozenset({"GEMINI_API_KEY"})
 
 
 class DemoError(Exception):
@@ -66,7 +78,11 @@ def _free_port() -> int:
 
 
 def _server_environment(port: int) -> dict[str, str]:
-    environment = dict(os.environ)
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(_STRIPPED_PREFIXES) and key not in _STRIPPED_KEYS
+    }
     environment.update(
         {
             "IEC_TOKENS": f"{TOKEN}={TENANT}",
@@ -128,17 +144,28 @@ def _pick_case() -> tuple[str, dict[str, str]]:
 
 
 def _wait_for_health(base_url: str, process: "subprocess.Popen[str]") -> None:
-    for remaining in range(HEALTH_ATTEMPTS, 0, -1):
+    deadline = time.monotonic() + HEALTH_DEADLINE_SECONDS
+    while True:
         if process.poll() is not None:
             raise DemoError(f"the control plane exited early with code {process.returncode}")
         try:
             _get(f"{base_url}/health", timeout=3.0)
         except (urllib.error.URLError, OSError, TimeoutError):
-            if remaining == 1:
+            if time.monotonic() >= deadline:
                 raise DemoError("the control plane never answered /health") from None
             time.sleep(POLL_SECONDS)
         else:
             return
+
+
+def _error_code(error: urllib.error.HTTPError) -> str:
+    """The stable ``code`` field of an error body, or ``unknown``; never the raw body."""
+    try:
+        body = json.loads(error.read().decode("utf-8", errors="replace"))
+        code = body.get("code") if isinstance(body, dict) else None
+        return code if isinstance(code, str) and code.isidentifier() else "unknown"
+    except (OSError, ValueError, AttributeError):
+        return "unknown"
 
 
 def _post_investigation(base_url: str, incident: str, window: dict[str, str]) -> str:
@@ -157,28 +184,39 @@ def _post_investigation(base_url: str, incident: str, window: dict[str, str]) ->
         with urllib.request.urlopen(request, timeout=10.0) as response:
             if response.status != 202:
                 raise DemoError(f"POST /investigations answered {response.status}, expected 202")
-            accepted: dict[str, Any] = json.loads(response.read())
+            accepted = json.loads(response.read())
+            investigation_id = accepted["investigation_id"]
     except urllib.error.HTTPError as error:
-        raise DemoError(f"POST /investigations answered {error.code}") from None
-    except (urllib.error.URLError, OSError, TimeoutError, ValueError) as error:
+        raise DemoError(
+            f"POST /investigations answered {error.code} ({_error_code(error)})"
+        ) from None
+    except (urllib.error.URLError, OSError, TimeoutError, ValueError, KeyError, TypeError) as error:
         raise DemoError(f"POST /investigations failed ({type(error).__name__})") from None
-    return str(accepted["investigation_id"])
+    if not isinstance(investigation_id, str):
+        raise DemoError("POST /investigations answered 202 without an investigation id")
+    return investigation_id
 
 
 def _poll_report(
     base_url: str, investigation_id: str, process: "subprocess.Popen[str]"
 ) -> dict[str, Any]:
     url = f"{base_url}/investigations/{investigation_id}/report"
+    deadline = time.monotonic() + REPORT_DEADLINE_SECONDS
     last = "no attempt completed"
-    for _ in range(REPORT_ATTEMPTS):
+    while time.monotonic() < deadline:
         if process.poll() is not None:
             raise DemoError(f"the control plane exited early with code {process.returncode}")
         try:
             report: dict[str, Any] = json.loads(_get(url, timeout=5.0, token=TOKEN))
             return report
         except urllib.error.HTTPError as error:
-            # 409 report_not_ready is the expected answer until the worker drains the queue.
-            last = f"HTTP {error.code}"
+            # 409 report_not_ready is the one answer worth waiting on; every other status is a
+            # definite failure and is reported at once rather than retried into a timeout.
+            if error.code != 409:
+                raise DemoError(
+                    f"GET report answered {error.code} ({_error_code(error)})"
+                ) from None
+            last = "HTTP 409"
         except (urllib.error.URLError, OSError, TimeoutError, ValueError) as error:
             last = type(error).__name__
         time.sleep(POLL_SECONDS)
@@ -251,6 +289,7 @@ def main() -> int:
     print(f"starting python -m incident_evidence_compiler on {base_url}")
 
     failure: str | None = None
+    interrupted = False
     tail: deque[str] = deque(maxlen=LOG_TAIL_LINES)
     process = subprocess.Popen(
         [sys.executable, "-m", "incident_evidence_compiler"],
@@ -270,12 +309,19 @@ def main() -> int:
         _investigate(base_url, process, incident, window)
     except DemoError as error:
         failure = str(error)
+    except BaseException:
+        # A KeyboardInterrupt or an unexpected error still gets the server stopped (below) and
+        # the log tail printed, so an interrupted run leaves neither an orphan nor a mystery.
+        interrupted = True
+        raise
     finally:
         # Terminating closes the write end of the pipe, so the reader sees EOF and stops on its
         # own; the stream is only closed once nothing is iterating it.
         _terminate(process)
         reader.join(timeout=5.0)
         process.stdout.close()
+        if interrupted:
+            _print_log_tail(tail)
 
     if failure is not None:
         print(f"demo failed: {failure}", file=sys.stderr)

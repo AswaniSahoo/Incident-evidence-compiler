@@ -15,10 +15,15 @@ Usage (after `docker compose --profile demo up -d --build`):
 
 import argparse
 import json
+import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
+
+# The script directory is not on sys.path under PYTHONSAFEPATH=1, ``python -P`` or ``python -I``.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _demo_common import format_baseline_ranking, format_predicates
 

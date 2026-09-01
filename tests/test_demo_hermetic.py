@@ -29,7 +29,10 @@ class HermeticDemoTests(unittest.TestCase):
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=60,
+            # The driver bounds itself to about 75 s worst case (see its deadline constants), so
+            # it always exits on its own before this timeout fires; if the timeout ever did fire
+            # it would kill only the driver and orphan the server it started.
+            timeout=90,
             cwd=ROOT,
             check=False,
         )
@@ -40,9 +43,16 @@ class HermeticDemoTests(unittest.TestCase):
         self.assertIn("no database: in-memory store", output, detail)
         self.assertIn("no network: loopback only", output, detail)
         self.assertIn("telemetry: committed synthetic fixture", output, detail)
-        self.assertIn("the API, worker, evidence ledger and verifier are the real ones", output)
+        self.assertIn(
+            "the API, worker, evidence ledger and verifier are the real ones", output, detail
+        )
         self.assertIn("verdict: supported", output, detail)
-        self.assertIn("baseline ranking", output, detail)
+        self.assertIn("p1: supported observed=increase supporting=1", output, detail)
+        # Assert on lines the formatter's own fallback strings can never produce, so a broken
+        # ranking payload ("baseline ranking: unavailable") fails here instead of passing.
+        self.assertIn("baseline ranking (deterministic, no model): kind=ranking", output, detail)
+        self.assertIn("  1. cpu", output, detail)
+        self.assertNotIn("unavailable", output, detail)
         # The opaque case id is what reaches the prompt; the labelled directory must not appear.
         self.assertNotIn("CANARYSERVICE", output)
         self.assertNotIn("OTHERSERVICE", output)
