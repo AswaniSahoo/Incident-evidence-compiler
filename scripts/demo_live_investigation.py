@@ -6,7 +6,8 @@ exactly rather than by guesswork, waits for the window to fill with real scrapes
 an investigation and polls for the verified report.
 
 The telemetry is invented (see ``demo_anomaly_exporter.py``); the Prometheus, the range query,
-the worker, and the verifier are all real. Standard-library only.
+the worker, and the verifier are all real. Standard library only, plus the report formatters in
+``_demo_common.py`` that this driver shares with the hermetic one so both print alike.
 
 Usage (after `docker compose --profile demo up -d --build`):
     uv run --locked python scripts/demo_live_investigation.py
@@ -18,6 +19,8 @@ import time
 import urllib.error
 import urllib.request
 from typing import Any
+
+from _demo_common import format_baseline_ranking, format_predicates
 
 _DEFAULT_EXPORTER = "http://127.0.0.1:9101/metrics"
 _DEFAULT_COMPILER = "http://127.0.0.1:8000"
@@ -130,15 +133,12 @@ def main() -> int:
         args.compiler_url, args.token, investigation_id, attempts=args.timeout_seconds
     )
     verdict = report["report"]["verdict"]
-    predicates = report["report"].get("predicate_results", [])
+    predicates = format_predicates(report)
     print(f"\nverdict: {verdict}")
-    for predicate in predicates:
-        print(
-            f"  {predicate['predicate_id']}: {predicate['verdict']}"
-            f" observed={predicate.get('observed_direction')}"
-            f" supporting={len(predicate.get('supporting_evidence_ids', []))}"
-            f" contradicting={len(predicate.get('contradicting_evidence_ids', []))}"
-        )
+    if predicates:
+        print(predicates)
+    print()
+    print(format_baseline_ranking(report))
     print(json.dumps(report, indent=2)[:2000])
     return 0
 
