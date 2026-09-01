@@ -67,10 +67,13 @@ When it proposes, the only thing it can add is a claim the verifier checked.
 Where a model is deliberately not used:
 
 - It never writes a query. PromQL selectors are operator configuration.
-- It never sees a value. Only allow-listed signal names reach the prompt.
+- It never sees a value. The prompt carries the allow-listed signal names plus the tenant,
+  incident and run identifiers, nothing else.
 - It never decides. Verdicts come from code that does not read the prompt.
 - It never remediates. The verified report is the end of the pipeline.
-- It never writes into the record. No model text is retained in reports, error bodies, or logs.
+- It never writes prose into the record. The only model-authored text that survives is the
+  predicate and hypothesis identifiers, labels the verifier copies but never interprets. No
+  model prose reaches reports, error bodies, or logs.
 
 ## What is actually interesting here
 
@@ -123,7 +126,8 @@ investigator's claims survive contact with the evidence, whichever model produce
 integrate with their system and claims nothing about it.
 
 Razorpay's engineering blog has a name for the phase this shortens: Mean Time to Isolate, "the time
-between issue detection/alert creation time and issue isolation time" (November 2023). It is the
+between issue detection/alert creation time and issue isolation time"
+([November 2023](https://engineering.razorpay.com/how-automation-contributed-to-improved-systems-availability-developer-productivity-16c992fdb7da)). It is the
 part of an outage spent working out which component to look at. What IEC buys there, measured: on
 the sealed held-out split the deterministic ranking alone puts the faulty service first in 77% of
 incidents and in the top three in 88%, with zero fabricated citations. An on-call engineer starts
@@ -454,8 +458,9 @@ digest on purpose: a RE2 case directory is named `<service>_<fault>`, and the in
 the prompt verbatim, so the directory name is never served. This run is also a test
 ([`tests/test_demo_hermetic.py`](tests/test_demo_hermetic.py)) that executes the script as a
 subprocess in the hermetic gate, so the entrypoint, config parsing, auth, worker loop and report
-endpoint cannot break without CI noticing. The same formatter prints the ranking in the live
-driver below.
+endpoint cannot break without CI noticing. The same formatter now prints the ranking in the live
+driver too; the two live transcripts below were captured before that change and end at the
+predicate lines.
 
 ## Demo: a real Prometheus with synthetic data
 
@@ -464,7 +469,9 @@ points the ingestion path at it. Everything about the plumbing is genuine, a rea
 real range query, the real worker and verifier. Only the *numbers* are invented, and the exporter
 says so in its own docstring. Both transcripts below ran at the served default threshold,
 `minimum_score=1.0`, not the `3.0` the Results tables were measured at; `IEC_BASELINE_MIN_SCORE=3.0`
-runs the same demo at the evaluated configuration.
+runs the same demo at the evaluated configuration. Both were also captured on 2026-08-23 and
+2026-08-31, before the driver printed the baseline ranking block (added 2026-09-02); a fresh run
+prints it after the predicate lines.
 
 The scenario is a **payment-routing incident** (ADR 0018). Four components, `bank_router`,
 `checkout`, `upi_switch`, `ledger_db`, sit flat until a published instant, when `bank_router`, as
