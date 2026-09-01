@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-08-30
+Last verified: 2026-09-01
 
 ## Current phase
 
@@ -18,6 +18,12 @@ ambient `climate-risk-agent` project) had Gemini propose four predicates; the ve
 for the other three, including the `ledger_db` decoy, one verified-true, three guesses withheld,
 zero false assertions. (ADR 0017's earlier `checkout` runs and the divergent-default Gemini fix are
 recorded in devlog 0012.)
+A second Vertex demo run (2026-08-31) had Gemini propose only checkout predicates; the verifier
+returned `unknown` on both, zero false assertions, while the persisted `baseline_ranking` placed
+the injected `bank_router` fault first. The gemini arm was also re-evaluated on RE2-OB with
+`gemini-3.7-flash` under the frozen configuration (artifact
+`docs/evaluation/re2-ob-gemini-3.7-flash.json`): Top-1 0.068, abstention 0.455, zero invalid
+citations. Both are recorded in devlog 0018. RE2-TT remains sealed, opened exactly once.
 
 ## Current objective
 
@@ -38,8 +44,10 @@ the divergent default-model incident so the Buildathon "what broke" answer links
 artifact. The README now leads with the verifier refusing a plausible answer, as a table rather than
 a Mermaid block, so nothing above the fold depends on GitHub's diagram renderer.
 
-**The only remaining Buildathon item is the 5-minute pitch video.** The script, screen direction,
-form answer and production plan are written in the gitignored `docs/learning/`. Note: `mermaid-cli`
+**The pitch video is recorded** (from `docs/learning/pitch-video-script-v3.md`); the only
+remaining Buildathon item is the application form itself, 12 fields, re-verified live on
+2026-09-01, deadline 2026-09-05. The script, screen direction, drafted form answer and production
+plan are in the gitignored `docs/learning/`. Note: `mermaid-cli`
 cannot pre-render diagrams on this machine (puppeteer fails to launch Chromium), so the two Mermaid
 blocks stay inline and unrendered; they sit below the fold and are not load-bearing.
 
@@ -142,8 +150,9 @@ full pass), plus a container build and smoke test:
 
 The immediate goal is the **Razorpay AI Buildathon** (Open Track, applications close 2026-09-05):
 the repo, ADRs, sealed held-out metrics, and the live Vertex run already satisfy the "public repo +
-architecture docs + honest metrics + working, not prototype" bar; the one net-new artifact is a
-**5-minute pitch video**. Positioning notes: `docs/learning/razorpay-buildathon.md` (private).
+architecture docs + honest metrics + working, not prototype" bar; the **5-minute pitch video is
+recorded**, so what remains is submitting the application form. Positioning notes and the drafted
+"what broke" form answer: `docs/learning/razorpay-buildathon.md` (private).
 
 Two items this file previously listed as pending are done: `feat/prometheus-telemetry` merged to
 `main` at `bd1bb64` (PR #4), and ADR 0019 shipped the `baseline_ranking` field (migration `0002`,
