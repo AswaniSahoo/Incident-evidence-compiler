@@ -453,7 +453,9 @@ baseline ranking (deterministic, no model): kind=ranking minimum_score=1.00
   2. latency   suspicion=1.90   direction=increase
 ```
 
-The port and the investigation id change every run; nothing else does. The case id is an opaque
+The port and the investigation id change every run; nothing else does. Verified on 2026-09-02 on
+Ubuntu 24.04 (WSL2, Python 3.12.13) and Windows 11 (Python 3.12.10), identical output on both.
+The case id is an opaque
 digest on purpose: a RE2 case directory is named `<service>_<fault>`, and the incident id reaches
 the prompt verbatim, so the directory name is never served. This run is also a test
 ([`tests/test_demo_hermetic.py`](tests/test_demo_hermetic.py)) that executes the script as a

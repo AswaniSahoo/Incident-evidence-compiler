@@ -30,7 +30,9 @@ idempotency key returning 500, dict-lookup token comparison, driver detail in ex
 all fixed test-first on 2026-08-31, plus six findings disclosed and deferred. Two additions for
 the judges' "does it run" bar: `IEC_BASELINE_MIN_SCORE` (run the served system at the evaluated
 `3.0`; default unchanged) and `scripts/demo_hermetic_investigation.py` (real entrypoint, real
-HTTP, committed fixture, smoke client, no Docker or credentials). The README gained "Why the model
+HTTP, committed fixture, smoke client, no Docker or credentials). The full gate was also run on
+Linux (WSL2 Ubuntu 24.04.4, uv 0.11.17, CPython 3.12.13): 362 tests OK, hermetic test 2.05 s,
+identical demo output. The README gained "Why the model
 is used this way", "Who this is for" with the Razorpay Oncall Agent and Mean Time to Isolate
 framing, and three more honest limitations.
 

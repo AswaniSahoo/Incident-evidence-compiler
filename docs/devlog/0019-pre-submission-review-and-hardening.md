@@ -88,3 +88,20 @@ baseline ranking. No Docker, no credentials, no network beyond loopback. The ran
 shared with the live driver (`scripts/_demo_common.py`), so both print alike, and the live driver
 now shows the ranking the earlier transcripts could not. An end-to-end test runs the script as a
 subprocess and asserts the banner, the verdict, and the ranking block.
+
+**Cross-platform check.** Everything above was developed on Windows 11, and CI runs on Linux, so
+the branch head was archived (`git archive HEAD`) and the whole gate was run inside WSL2 Ubuntu
+24.04.4 LTS with uv 0.11.17 and a uv-managed CPython 3.12.13: `compileall` clean, 362 tests OK
+(10 skipped without infrastructure) in 6.8 s, the hermetic subprocess test alone OK in 2.05 s,
+`validate_project.py` full pass, and the demo printed the same verdict and ranking as on Windows.
+
+**Review of the additions.** A code-review pass over the two additions returned eight verified
+findings, all fixed before commit: the demo inherited ambient `IEC_*` variables from the
+operator's shell (now stripped), its retry budget could outlast the end-to-end test's timeout and
+orphan the server (now wall-clock deadlines well inside the timeout), non-409 answers were retried
+into a timeout instead of reported (now fail fast with the stable error code), the test's ranking
+assertion was satisfiable by the formatter's own fallback string (now asserts on lines the
+fallback cannot produce), `PYTHONSAFEPATH=1` broke the `_demo_common` import (now explicit
+`sys.path`), and two README bullets overclaimed what the prompt carries and what model text
+survives (now stated exactly). A security review of the same diff found nothing at HIGH or
+MEDIUM.
