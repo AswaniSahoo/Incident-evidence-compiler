@@ -37,7 +37,9 @@ deterministic verifier resolved each against the ingested evidence ledger:
 **One verified true. Three guesses withheld. Zero false assertions.** The one it got right was a
 guess too: it cannot see a single value. The difference is that the verifier could check that one
 against the ledger and could not check the other three. The model was wrong three times out of four
-and the system was still right, because being wrong never became a conclusion.
+and the system was still right, because being wrong never became a conclusion. The component a
+report actually names comes from a separate deterministic ranking that never involves the model
+(see [Results](#results)).
 
 Across 178 evaluated cases, two model generations, and two live runs, the count of invalid
 evidence citations is zero. Everything else about the model may vary; that column does not.
@@ -58,7 +60,9 @@ Gemini's role is deliberately narrow: it reads signal names from a caller-suppli
 proposes which ones shifted. It never sees a metric value. The narrowness is the design, because
 the layer that can hallucinate must not be the layer that decides what is true. The gate held
 unchanged across two model generations, `gemini-2.5-flash` and `gemini-3.7-flash`, over 88
-fault-injection cases each: zero invalid evidence citations from either.
+fault-injection cases each: zero invalid evidence citations from either. When the model abstains,
+the report still carries the deterministic ranking, so an abstention costs the reader nothing.
+When it proposes, the only thing it can add is a claim the verifier checked.
 
 Where a model is deliberately not used:
 
@@ -136,6 +140,10 @@ row). Metrics are aggregate and label-free; the raw artifacts live in
 | Baseline (deterministic) | **0.932** | **0.989** | **0.959** | 0.000 | 0 |
 | + Gemini (`gemini-2.5-flash`, verified) | 0.080 (0.159 answered) | 0.091 | 0.085 | 0.500 | 0 |
 | + Gemini (`gemini-3.7-flash`, verified) | 0.068 (0.125 answered) | 0.068 | 0.068 | 0.455 | 0 |
+
+An abstention counts as a miss, so the plain Top-1 is over all cases. The figure in parentheses is
+Top-1 over the cases the arm answered (`top1_accuracy_answered` in the artifacts, computed over
+`answered_count`), which is why it is the plain figure divided by one minus the abstention rate.
 
 Read those rows as a bracket, not a race. The baseline row is the localization the report actually
 carries: it sees the metric values and finds the faulty service. The two Gemini rows are a
@@ -454,7 +462,9 @@ driver below.
 The `demo` compose profile stands up a real Prometheus scraping a small synthetic exporter, and
 points the ingestion path at it. Everything about the plumbing is genuine, a real Prometheus, a
 real range query, the real worker and verifier. Only the *numbers* are invented, and the exporter
-says so in its own docstring.
+says so in its own docstring. Both transcripts below ran at the served default threshold,
+`minimum_score=1.0`, not the `3.0` the Results tables were measured at; `IEC_BASELINE_MIN_SCORE=3.0`
+runs the same demo at the evaluated configuration.
 
 The scenario is a **payment-routing incident** (ADR 0018). Four components, `bank_router`,
 `checkout`, `upi_switch`, `ledger_db`, sit flat until a published instant, when `bank_router`, as
