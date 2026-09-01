@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-09-01
+Last verified: 2026-09-02
 
 ## Current phase
 
@@ -10,7 +10,7 @@ ranking as an additive nullable `baseline_ranking` field) are **accepted and mer
 (PR #5 plus direct commits). ADR 0018 reskins the ADR 0017 profile into a bank-router deploy
 incident (`bank_router` faulty, `ledger_db` a deliberate healthy decoy) with no domain, port, or
 verifier change; ADR 0019 persists the ranking additively (migration `0002`, verification schema
-untouched). The full locked gate is green (346 tests), and the Postgres `SKIP LOCKED` durability
+untouched). The full locked gate is green (362 tests), and the Postgres `SKIP LOCKED` durability
 suite was verified against `postgres:16` (devlog 0014).
 A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
 ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned
@@ -24,6 +24,15 @@ the injected `bank_router` fault first. The gemini arm was also re-evaluated on 
 `gemini-3.7-flash` under the frozen configuration (artifact
 `docs/evaluation/re2-ob-gemini-3.7-flash.json`): Top-1 0.068, abstention 0.455, zero invalid
 citations. Both are recorded in devlog 0018. RE2-TT remains sealed, opened exactly once.
+Pre-submission pass (2026-09-02, devlog 0019): an adversarial review found five defects at the
+edges (poison-job livelock, fault labels reaching the prompt in rcaeval demo mode, a blank
+idempotency key returning 500, dict-lookup token comparison, driver detail in exception chains),
+all fixed test-first on 2026-08-31, plus six findings disclosed and deferred. Two additions for
+the judges' "does it run" bar: `IEC_BASELINE_MIN_SCORE` (run the served system at the evaluated
+`3.0`; default unchanged) and `scripts/demo_hermetic_investigation.py` (real entrypoint, real
+HTTP, committed fixture, smoke client, no Docker or credentials). The README gained "Why the model
+is used this way", "Who this is for" with the Razorpay Oncall Agent and Mean Time to Isolate
+framing, and three more honest limitations.
 
 ## Current objective
 
