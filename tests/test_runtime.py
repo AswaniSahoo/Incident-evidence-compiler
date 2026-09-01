@@ -102,6 +102,23 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(ConfigError):
                 AppConfig.from_env(env)
 
+    def test_baseline_minimum_score_defaults_to_none(self) -> None:
+        config = AppConfig.from_env(_base_env())
+        self.assertIsNone(config.baseline_minimum_score)
+
+    def test_baseline_minimum_score_parses_a_valid_value(self) -> None:
+        config = AppConfig.from_env(_base_env(IEC_BASELINE_MIN_SCORE="3.0"))
+        self.assertEqual(config.baseline_minimum_score, 3.0)
+
+    def test_baseline_minimum_score_parses_zero(self) -> None:
+        config = AppConfig.from_env(_base_env(IEC_BASELINE_MIN_SCORE="0"))
+        self.assertEqual(config.baseline_minimum_score, 0.0)
+
+    def test_baseline_minimum_score_rejects_invalid_values(self) -> None:
+        for bad in ("abc", "-1", "nan", "inf", ""):
+            with self.assertRaises(ConfigError):
+                AppConfig.from_env(_base_env(IEC_BASELINE_MIN_SCORE=bad))
+
 
 class DemoLLMClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_proposes_parseable_hypothesis_over_first_allowed_signal(self) -> None:
@@ -219,6 +236,84 @@ class BuildComponentsTests(unittest.IsolatedAsyncioTestCase):
         # The CANARY fixture's cpu signal shifts up across the injection boundary, and the
         # smoke client proposes an increase on the first allowed signal (cpu) -> supported.
         self.assertEqual(report.json()["report"]["verdict"], "supported")
+
+    async def test_baseline_minimum_score_defaults_to_the_worker_default(self) -> None:
+        components = build_components(self._config())
+        assert isinstance(components.telemetry, RcaevalTelemetrySource)
+        incident = _canary_incident(components.telemetry)
+        window = components.telemetry.available[incident]
+
+        transport = httpx.ASGITransport(app=components.app)
+        headers = {"Authorization": f"Bearer {_TOKEN}"}
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post(
+                "/investigations",
+                headers=headers,
+                json={
+                    "incident_id": incident,
+                    "run_id": "run-1",
+                    "window": {
+                        "start": window.start.isoformat(),
+                        "injection": window.injection.isoformat(),
+                        "end": window.end.isoformat(),
+                    },
+                },
+            )
+            self.assertEqual(created.status_code, 202)
+
+            assert components.worker is not None
+            self.assertTrue(await components.worker.run_once())
+
+            investigation_id = created.json()["investigation_id"]
+            report = await client.get(f"/investigations/{investigation_id}/report", headers=headers)
+        self.assertEqual(report.status_code, 200)
+        # Pinned so a silent default change is caught: DEFAULT_BASELINE_POLICY.minimum_score
+        # is 1.0, and build_components must not alter it when the env var is unset.
+        self.assertEqual(report.json()["baseline_ranking"]["policy"]["minimum_score"], (1.0).hex())
+
+    async def test_baseline_minimum_score_env_var_overrides_the_worker_policy(self) -> None:
+        config = AppConfig.from_env(
+            _base_env(
+                IEC_PERSISTENCE="memory",
+                IEC_LLM_PROVIDER="fake",
+                IEC_TELEMETRY="rcaeval",
+                IEC_RE2_ROOT=str(_FIXTURE_ROOT),
+                IEC_BASELINE_MIN_SCORE="3.0",
+            )
+        )
+        components = build_components(config)
+        assert isinstance(components.telemetry, RcaevalTelemetrySource)
+        incident = _canary_incident(components.telemetry)
+        window = components.telemetry.available[incident]
+
+        transport = httpx.ASGITransport(app=components.app)
+        headers = {"Authorization": f"Bearer {_TOKEN}"}
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            created = await client.post(
+                "/investigations",
+                headers=headers,
+                json={
+                    "incident_id": incident,
+                    "run_id": "run-1",
+                    "window": {
+                        "start": window.start.isoformat(),
+                        "injection": window.injection.isoformat(),
+                        "end": window.end.isoformat(),
+                    },
+                },
+            )
+            self.assertEqual(created.status_code, 202)
+
+            assert components.worker is not None
+            self.assertTrue(await components.worker.run_once())
+
+            investigation_id = created.json()["investigation_id"]
+            report = await client.get(f"/investigations/{investigation_id}/report", headers=headers)
+        self.assertEqual(report.status_code, 200)
+        # This is the published-evaluation threshold (baseline_inputs.DEFAULT_EVALUATION_POLICY).
+        # Whether the CANARY case ranks or abstains at this threshold, _baseline_ranking_payload
+        # always serializes a "policy" block, so this assertion holds either way.
+        self.assertEqual(report.json()["baseline_ranking"]["policy"]["minimum_score"], (3.0).hex())
 
 
 class WorkerLoopTests(unittest.IsolatedAsyncioTestCase):

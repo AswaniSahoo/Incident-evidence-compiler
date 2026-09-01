@@ -8,6 +8,7 @@ infrastructure; the domain and application layers stay framework- and driver-agn
 
 import asyncio
 import contextlib
+import dataclasses
 import logging
 import os
 import sys
@@ -18,7 +19,7 @@ from datetime import timedelta
 from fastapi import FastAPI
 
 from ..api import TokenRegistry, create_app
-from ..application import InMemoryTelemetrySource, TelemetrySource, Worker
+from ..application import DEFAULT_BASELINE_POLICY, InMemoryTelemetrySource, TelemetrySource, Worker
 from ..llm import GeminiLLMClient, LLMClient
 from ..observability import MetricsRegistry
 from ..persistence import InMemoryUnitOfWorkFactory, UnitOfWorkFactory
@@ -88,13 +89,27 @@ def build_components(config: AppConfig) -> ServerComponents:
     app = create_app(uow_factory=uow_factory, tokens=tokens, metrics=metrics)
     worker: Worker | None = None
     if config.worker_enabled:
-        worker = Worker(
-            uow_factory,
-            _build_llm_client(config),
-            telemetry,
-            worker_id=_WORKER_ID,
-            metrics=metrics,
-        )
+        llm_client = _build_llm_client(config)
+        if config.baseline_minimum_score is None:
+            worker = Worker(
+                uow_factory,
+                llm_client,
+                telemetry,
+                worker_id=_WORKER_ID,
+                metrics=metrics,
+            )
+        else:
+            policy = dataclasses.replace(
+                DEFAULT_BASELINE_POLICY, minimum_score=config.baseline_minimum_score
+            )
+            worker = Worker(
+                uow_factory,
+                llm_client,
+                telemetry,
+                worker_id=_WORKER_ID,
+                metrics=metrics,
+                policy=policy,
+            )
     return ServerComponents(
         app=app,
         worker=worker,

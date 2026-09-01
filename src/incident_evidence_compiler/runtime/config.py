@@ -6,6 +6,7 @@ value. Nothing is silently defaulted into a production-shaped lie, and no secret
 ever echoed back in an error.
 """
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,19 @@ def _parse_positive_float(env: Mapping[str, str], key: str, default: float) -> f
     return value
 
 
+def _parse_optional_nonnegative_float(env: Mapping[str, str], key: str) -> float | None:
+    if key not in env:
+        return None
+    raw = env[key].strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        raise ConfigError(f"{key} must be a number") from None
+    if not math.isfinite(value) or value < 0.0:
+        raise ConfigError(f"{key} must be a finite number >= 0.0")
+    return value
+
+
 def _parse_positive_int(env: Mapping[str, str], key: str, default: int) -> int:
     raw = env.get(key, str(default)).strip()
     try:
@@ -128,6 +142,7 @@ class AppConfig:
     bind_port: int
     worker_enabled: bool
     worker_idle_sleep_seconds: float
+    baseline_minimum_score: float | None
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> "AppConfig":
@@ -175,4 +190,5 @@ class AppConfig:
             worker_idle_sleep_seconds=_parse_positive_float(
                 env, "IEC_WORKER_IDLE_SLEEP_SECONDS", 1.0
             ),
+            baseline_minimum_score=_parse_optional_nonnegative_float(env, "IEC_BASELINE_MIN_SCORE"),
         )
