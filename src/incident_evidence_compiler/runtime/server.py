@@ -89,27 +89,21 @@ def build_components(config: AppConfig) -> ServerComponents:
     app = create_app(uow_factory=uow_factory, tokens=tokens, metrics=metrics)
     worker: Worker | None = None
     if config.worker_enabled:
-        llm_client = _build_llm_client(config)
-        if config.baseline_minimum_score is None:
-            worker = Worker(
-                uow_factory,
-                llm_client,
-                telemetry,
-                worker_id=_WORKER_ID,
-                metrics=metrics,
-            )
-        else:
-            policy = dataclasses.replace(
+        policy = (
+            DEFAULT_BASELINE_POLICY
+            if config.baseline_minimum_score is None
+            else dataclasses.replace(
                 DEFAULT_BASELINE_POLICY, minimum_score=config.baseline_minimum_score
             )
-            worker = Worker(
-                uow_factory,
-                llm_client,
-                telemetry,
-                worker_id=_WORKER_ID,
-                metrics=metrics,
-                policy=policy,
-            )
+        )
+        worker = Worker(
+            uow_factory,
+            _build_llm_client(config),
+            telemetry,
+            worker_id=_WORKER_ID,
+            metrics=metrics,
+            policy=policy,
+        )
     return ServerComponents(
         app=app,
         worker=worker,
