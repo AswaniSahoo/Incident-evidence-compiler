@@ -1,0 +1,34 @@
+{
+  "arm": "gemini",
+  "config": {
+    "minimum_margin": 0.0,
+    "minimum_points_per_window": 2,
+    "minimum_score": 3.0,
+    "relative_scale_floor": 0.0,
+    "scale_floor_absolute_epsilon": 1e-09,
+    "scale_floor_relative_fraction": 0.05
+  },
+  "dataset": {
+    "name": "RCAEval RE2",
+    "release": "1.2.0",
+    "release_commit": "bc49dbd85bd14032101fb9a69a5a37e9d6d55178",
+    "skipped_case_count": 2,
+    "split": "OB"
+  },
+  "metrics": {
+    "abstained_count": 40,
+    "abstention_rate": 0.454545,
+    "answered_count": 48,
+    "case_count": 88,
+    "invalid_evidence_id_count": 0,
+    "mrr": 0.068182,
+    "mrr_answered": 0.125,
+    "top1_accuracy": 0.068182,
+    "top1_accuracy_answered": 0.125,
+    "top3_accuracy": 0.068182,
+    "top3_accuracy_answered": 0.125
+  },
+  "model": "gemini-3.7-flash",
+  "notes": "Aggregate, label-free metrics over the RCAEval RE2 development split. Per-case ground truth and source locators are never emitted. Raw data is never committed (ADR 0009).",
+  "schema_version": 1
+}
