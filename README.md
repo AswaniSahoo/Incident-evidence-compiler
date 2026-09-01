@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-346_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-362_passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
@@ -55,11 +55,18 @@ Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-syn
 ## Why the model is used this way
 
 Gemini's role is deliberately narrow: it reads signal names from a caller-supplied allow-list and
-proposes which ones shifted. It never sees metric values, never writes SQL, never runs a command.
-That narrowness is not a limitation I accepted, it is the design: the layer that can hallucinate
-must not be the layer that decides what is true. The gate held unchanged across two model
-generations, `gemini-2.5-flash` and `gemini-3.7-flash`, over 88 fault-injection cases each: zero
-invalid evidence citations from either.
+proposes which ones shifted. It never sees a metric value. The narrowness is the design, because
+the layer that can hallucinate must not be the layer that decides what is true. The gate held
+unchanged across two model generations, `gemini-2.5-flash` and `gemini-3.7-flash`, over 88
+fault-injection cases each: zero invalid evidence citations from either.
+
+Where a model is deliberately not used:
+
+- It never writes a query. PromQL selectors are operator configuration.
+- It never sees a value. Only allow-listed signal names reach the prompt.
+- It never decides. Verdicts come from code that does not read the prompt.
+- It never remediates. The verified report is the end of the pipeline.
+- It never writes into the record. No model text is retained in reports, error bodies, or logs.
 
 ## What is actually interesting here
 
@@ -101,9 +108,22 @@ If you read one section, read this one. Every item links to the code or the arti
 An SRE or payments-reliability team that wants an LLM in the triage loop but cannot put an
 unverified model claim into a postmortem. IEC sits beside your monitoring: it ingests the incident
 window, lets the model propose what shifted, and hands back only what deterministic code could
-verify against ledgered evidence, with the guesses it refused listed as `UNKNOWN`. It never
-remediates, never queries on its own, and never sees a transaction. The on-call engineer keeps the
-decision; what they gain is a report where every accepted claim carries a hash they can check.
+verify against ledgered evidence, with the guesses it refused listed as `UNKNOWN`. It takes no
+action of its own and never sees a transaction. The on-call engineer keeps the decision. What they
+gain is a report where every accepted claim carries a hash they can check.
+
+The setting is not hypothetical. Razorpay's Oncall Agent post (Razorpay AI Labs, February 2026)
+describes a multi-agent investigator running in shadow mode while its accuracy is validated across
+incident cases. IEC is built for that validation side: the checking layer that decides which of an
+investigator's claims survive contact with the evidence, whichever model produced them. It does not
+integrate with their system and claims nothing about it.
+
+Razorpay's engineering blog has a name for the phase this shortens: Mean Time to Isolate, "the time
+between issue detection/alert creation time and issue isolation time" (November 2023). It is the
+part of an outage spent working out which component to look at. What IEC buys there, measured: on
+the sealed held-out split the deterministic ranking alone puts the faulty service first in 77% of
+incidents and in the top three in 88%, with zero fabricated citations. An on-call engineer starts
+at the right service three times out of four and never chases evidence that does not exist.
 
 ## Results
 
@@ -238,6 +258,17 @@ You need Python 3.12 and uv 0.11.17 (the lock/build tool, exact-pinned).
 uv sync --locked
 ```
 
+See one investigation go through the real service in a few seconds, with nothing else installed:
+
+```bash
+uv run --locked python scripts/demo_hermetic_investigation.py
+```
+
+That starts the real entrypoint on a loopback port with the in-memory store, the labelled smoke
+client (not a model), and the committed synthetic fixture, drives one investigation over HTTP, and
+prints the verified report and the deterministic baseline ranking. Its output is shown under
+[the hermetic run](#the-hermetic-run-no-docker-no-credentials).
+
 Run the hermetic gate. No database, no network, no credentials:
 
 ```bash
@@ -291,6 +322,9 @@ uv run --locked python -m incident_evidence_compiler
 | `IEC_PROM_TIMEOUT_SECONDS` | `30` | Per-query deadline. With several selectors, budget accordingly. |
 | `IEC_PROM_BEARER_TOKEN` | unset | Optional bearer credential. Never logged and never echoed in an error. |
 | `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image binds `0.0.0.0`). |
+| `IEC_BASELINE_MIN_SCORE` | unset (worker default `1.0`) | Baseline verifier threshold, a finite float `>= 0`. Set `3.0` to run the served system at the configuration the Results tables were measured at. The value in force is serialized into every report's `baseline_ranking.policy`. |
+| `IEC_WORKER_ENABLED` / `IEC_WORKER_IDLE_SLEEP_SECONDS` | `true` / `1.0` | Run the in-process worker, and how long it sleeps when the queue is empty. |
+| `IEC_RE2_SPLIT` / `IEC_GEMINI_MODEL` | `OB` / `gemini-2.5-flash` | RCAEval split for the demo bridge; Gemini model id for both providers. |
 
 Or run the container. It's a multi-stage uv build, runs as a non-root user, and health-checks
 `/health` with the standard library (no curl in the image):
@@ -384,6 +418,36 @@ string, not a JSON number, so a report round-trips bit-for-bit.
 
 Every error body is a flat `{"code": "<stable_code>"}`. No model text, no tenant data, no
 internals cross the boundary.
+
+## The hermetic run: no Docker, no credentials
+
+One command, nothing installed beyond Python and uv. It starts the real entrypoint on a free
+loopback port, drives one investigation through the real API, worker, ledger and verifier, and
+prints what came back. The first line of its output says exactly what is not real.
+
+```console
+$ uv run --locked python scripts/demo_hermetic_investigation.py
+no model: labelled smoke client; no database: in-memory store; no network: loopback only; telemetry: committed synthetic fixture; the API, worker, evidence ledger and verifier are the real ones
+incident case-fa1275f6104a977d99cd22119355272d (opaque case id), window 2026-01-01T00:00:00+00:00 .. 2026-01-01T00:03:00.000001+00:00
+starting python -m incident_evidence_compiler on http://127.0.0.1:54550
+control plane ready at http://127.0.0.1:54550/health
+investigation 170b1471-5a75-4c1e-8ff1-54ff786e48ff accepted; polling for the report
+
+verdict: supported
+  p1: supported observed=increase supporting=1 contradicting=0
+
+baseline ranking (deterministic, no model): kind=ranking minimum_score=1.00
+  1. cpu       suspicion=31.11  direction=increase
+  2. latency   suspicion=1.90   direction=increase
+```
+
+The port and the investigation id change every run; nothing else does. The case id is an opaque
+digest on purpose: a RE2 case directory is named `<service>_<fault>`, and the incident id reaches
+the prompt verbatim, so the directory name is never served. This run is also a test
+([`tests/test_demo_hermetic.py`](tests/test_demo_hermetic.py)) that executes the script as a
+subprocess in the hermetic gate, so the entrypoint, config parsing, auth, worker loop and report
+endpoint cannot break without CI noticing. The same formatter prints the ranking in the live
+driver below.
 
 ## Demo: a real Prometheus with synthetic data
 
@@ -574,33 +638,42 @@ decides what counts, and nothing is accepted because it merely sounds right.
 
 I'd rather list this plainly than let you find it the hard way.
 
-- **The held-out run is a single frozen pass.** RE2-TT was opened once (2026-07-19) for the
+- The held-out run is a single frozen pass. RE2-TT was opened once (2026-07-19) for the
   numbers above; RE2-SS stays reserved. The held-out result is deliberately not re-run or tuned.
-- **The LLM arm is deliberately blind to metric values.** Its low accuracy is the design working
+- The LLM arm is deliberately blind to metric values. Its low accuracy is the design working
   as intended (the verifier is the source of truth), not a bug I forgot to fix.
-- **Prometheus ingestion is proven against a real Prometheus, but only with synthetic data.** The
+- Prometheus ingestion is proven against a real Prometheus, but only with synthetic data. The
   bundled `demo` profile runs a real Prometheus scraping a synthetic exporter, and the full path
   has been exercised end to end (see [the demo](#demo-a-real-prometheus-with-synthetic-data)). The
   numbers are invented, so this says nothing about accuracy on real production telemetry, it
   proves the ingestion, not the diagnosis.
-- **Telemetry selectors are process-wide, not per tenant.** With `IEC_TELEMETRY=prometheus` the
+- Telemetry selectors are process-wide, not per tenant. With `IEC_TELEMETRY=prometheus` the
   PromQL selectors come from environment config, so every tenant a process authenticates sees the
   same metrics. Per-tenant, per-incident queries need schema and API work, and are deferred.
-- **No durable, tenant-owned telemetry ledger.** The worker also runs in-process; splitting it out
+- No durable, tenant-owned telemetry ledger. The worker also runs in-process; splitting it out
   is a later change.
-- **Metrics, but no tracing.** There's a dependency-free Prometheus `/metrics` endpoint (per-stage
+- Metrics, but no tracing. There's a dependency-free Prometheus `/metrics` endpoint (per-stage
   latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
   OpenTelemetry spans and cost estimation are deferred.
-- **The baseline policy is a sensible default,** not a calibrated risk-coverage curve.
-- **The served verifier threshold is looser than the evaluated one.** The worker runs
+- The in-memory store serializes the API behind the worker. With `IEC_PERSISTENCE=memory` one
+  lock is held for a whole job, model call included, so the data routes wait for up to the provider
+  deadline while `/health` and `/metrics` stay responsive. PostgreSQL has no such coupling.
+- The change-event ledger is implemented and tested but not wired. Only metric evidence flows
+  today; deployment co-occurrence verification waits for an ingestion source.
+- Evidence is deduplicated per run but listed per investigation. Two investigations over the
+  same run share a ledger, and the second one's evidence listing can come back empty while its
+  report still cites valid IDs. Recorded in [devlog 0019](docs/devlog/0019-pre-submission-review-and-hardening.md)
+  with the other findings that were disclosed rather than rushed.
+- The baseline policy is a sensible default, not a calibrated risk-coverage curve.
+- The served default threshold is looser than the evaluated one. The worker defaults to
   `minimum_score=1.0` ([`application/worker.py`](src/incident_evidence_compiler/application/worker.py));
   the benchmark ran `3.0`
-  ([`evaluation/harness/baseline_inputs.py`](src/incident_evidence_compiler/evaluation/harness/baseline_inputs.py)),
-  and there is no environment override yet. So the demo above is not run at the configuration the
-  Results tables were measured at, and a verdict there is not directly comparable to those numbers.
-  The policy is serialized into every report's `baseline_ranking.policy`, so you can always read
-  which one produced a given result.
-- **Single-node Postgres queue.** Redis admission control is deferred (ADR 0007).
+  ([`evaluation/harness/baseline_inputs.py`](src/incident_evidence_compiler/evaluation/harness/baseline_inputs.py)).
+  Both demo transcripts above were produced at the default, so they are not directly comparable to
+  the Results tables. `IEC_BASELINE_MIN_SCORE=3.0` runs the served system at the evaluated
+  configuration; the default stays at `1.0` so those transcripts remain reproducible, and the
+  policy in force is serialized into every report's `baseline_ranking.policy`.
+- Single-node Postgres queue. Redis admission control is deferred (ADR 0007).
 
 ## Roadmap
 
