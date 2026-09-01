@@ -39,6 +39,9 @@ guess too: it cannot see a single value. The difference is that the verifier cou
 against the ledger and could not check the other three. The model was wrong three times out of four
 and the system was still right, because being wrong never became a conclusion.
 
+Across 178 evaluated cases, two model generations, and two live runs, the count of invalid
+evidence citations is zero. Everything else about the model may vary; that column does not.
+
 Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-synthetic-data).
 
 > [!NOTE]
@@ -48,6 +51,15 @@ Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-syn
 > Vertex `gemini-2.5-flash` call, and the real deterministic verifier. It proves the ingestion path
 > and the verification gate. It does **not** prove diagnostic accuracy on production payment
 > telemetry, and nothing here claims that it does.
+
+## Why the model is used this way
+
+Gemini's role is deliberately narrow: it reads signal names from a caller-supplied allow-list and
+proposes which ones shifted. It never sees metric values, never writes SQL, never runs a command.
+That narrowness is not a limitation I accepted, it is the design: the layer that can hallucinate
+must not be the layer that decides what is true. The gate held unchanged across two model
+generations, `gemini-2.5-flash` and `gemini-3.7-flash`, over 88 fault-injection cases each: zero
+invalid evidence citations from either.
 
 ## What is actually interesting here
 
@@ -84,6 +96,15 @@ If you read one section, read this one. Every item links to the code or the arti
   model-generated SQL, shell access, autonomous remediation, and multi-agent orchestration.
   [`docs/decisions/`](docs/decisions/)
 
+## Who this is for
+
+An SRE or payments-reliability team that wants an LLM in the triage loop but cannot put an
+unverified model claim into a postmortem. IEC sits beside your monitoring: it ingests the incident
+window, lets the model propose what shifted, and hands back only what deterministic code could
+verify against ledgered evidence, with the guesses it refused listed as `UNKNOWN`. It never
+remediates, never queries on its own, and never sees a transaction. The on-call engineer keeps the
+decision; what they gain is a report where every accepted claim carries a hash they can check.
+
 ## Results
 
 Measured on the RCAEval RE2-OB **development** split, 88 cases (2 skipped for a truncated final
@@ -99,9 +120,9 @@ row). Metrics are aggregate and label-free; the raw artifacts live in
 Read those rows as a bracket, not a race. The baseline row is the localization the report actually
 carries: it sees the metric values and finds the faulty service. The two Gemini rows are a
 deliberate stress test of the verification gate across model generations. Both models are handed
-signal *names* only, never a value, so they are guessing among ~72 signals. The two-generation-newer
-3.7 Flash (with thinking) does not improve on 2.5 Flash when the input is deliberately impoverished,
-which is the point: the column that matters is invalid evidence IDs. **Zero across both models.**
+signal *names* only, never a value, so they are guessing among ~72 signals. The newer 3.7 Flash
+does not improve on 2.5 Flash when the input is deliberately impoverished, which is the point: the
+column that matters is invalid evidence IDs. **Zero across both models.**
 Handing the model the values would raise its Top-1 and prove nothing about the gate.
 
 ### Held-out (sealed RE2-TT)
@@ -425,23 +446,11 @@ That hash addresses the exact ledger entry the verdict rests on. Look it up and 
 bytes the verifier read.
 
 **With a real model (2026-08-23).** Run with `IEC_LLM_PROVIDER=vertex` (`gemini-2.5-flash` on a
-dedicated GCP project, ADC only, no credential in any container). Gemini, which sees only signal
-*names* and never a single value, proposed a four-predicate hypothesis
-(`payment_transaction_degradation`) casting a wide net across the payment surface. The verifier
-resolved each predicate against the live data:
-
-| Predicate Gemini proposed | Verdict | Grounds |
-|---|---|---|
-| `bank_router_latency_increase` | **`supported`** | cited evidence `sha256:758e…`, the real injected fault |
-| `checkout_error_increase` | **`unknown`** | `weak_evidence`, checkout never moved |
-| `ledger_db_error_increase` | **`unknown`** | `weak_evidence`, the decoy; the model reached for the database, the data didn't |
-| `upi_switch_latency_increase` | **`unknown`** | `weak_evidence`, never moved |
-
-**One verified-true, three guesses withheld, zero false assertions.** The model over-reached four
-ways; the verifier endorsed only the single claim real evidence supported, including refusing the
-tempting `ledger_db` decoy. That is the whole thesis in one report: the LLM is allowed to guess,
-only deterministic code is allowed to decide, and being wrong three times out of four costs nothing
-because none of it became a conclusion.
+dedicated GCP project, ADC only, no credential in any container). This run is the table at the top
+of the README: Gemini, seeing only signal names, cast a four-predicate net
+(`payment_transaction_degradation`); the verifier endorsed exactly one predicate and refused the
+other three, including the `ledger_db` decoy. The console output and cited-evidence JSON above are
+that report.
 
 **Same system, different day (2026-08-31).** A second Vertex run produced a completely different
 hypothesis. This time `gemini-2.5-flash` named the wrong component entirely:
@@ -466,10 +475,10 @@ verdict: unknown
 
 **Zero verified-true, two guesses withheld, zero false assertions.** The model focused on `checkout`
 and never mentioned `bank_router`. The verifier blocked everything. Meanwhile the deterministic
-`baseline_ranking` in the same report independently placed both `bank_router` signals at the top
-(suspicion scores `0x1.43…p+4` and `0x1.23…p+4`), an order of magnitude above the rest. The model
-was completely wrong; the system produced no false conclusions; the baseline engine found the fault
-without any model at all. That is a stronger test of the architecture than the first run.
+`baseline_ranking` in the same report independently placed both `bank_router` signals at the top of
+its ranking (devlog 0018). The model was completely wrong; the system produced no false conclusions;
+the baseline engine found the fault without any model at all. That is a stronger test of the
+architecture than the first run.
 
 **Without a model at all.** The same run with `IEC_LLM_PROVIDER=fake` (a smoke client needing no
 API, which names the lexicographically-first ingested signal, here `bank_router`'s error ratio)
