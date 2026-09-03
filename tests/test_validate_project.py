@@ -475,6 +475,15 @@ class PhasePolicyTests(unittest.TestCase):
         self.assertTrue(any("raw RCAEval archive" in error for error in errors))
         self.assertTrue(any("extracted RCAEval tree" in error for error in errors))
 
+    def test_dataset_policy_ignores_assistant_and_venv_paths(self) -> None:
+        claude_tree = validator.ROOT / ".claude" / "worktrees" / "test-tree" / "RE2-OB"
+        claude_tree.mkdir(parents=True)
+        venv_tree = validator.ROOT / ".venv" / "test-tree" / "RE2-OB"
+        venv_tree.mkdir(parents=True)
+        errors: list[str] = []
+        validator._validate_dataset_policy(errors)
+        self.assertEqual(errors, [])
+
 
 if __name__ == "__main__":
     unittest.main()

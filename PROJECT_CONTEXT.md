@@ -1,6 +1,6 @@
 # Project Context
 
-Last verified: 2026-09-02
+Last verified: 2026-09-03
 
 ## Current phase
 
@@ -35,6 +35,10 @@ Linux (WSL2 Ubuntu 24.04.4, uv 0.11.17, CPython 3.12.13): 362 tests OK, hermetic
 identical demo output. The README gained "Why the model
 is used this way", "Who this is for" with the Razorpay Oncall Agent and Mean Time to Isolate
 framing, and three more honest limitations.
+Pre-submission hygiene pass (2026-09-03): stale worktree pruned, `scripts/validate_project.py`
+updated to ignore virtualenv and assistant directories in dataset policy with unit test coverage
+in `tests/test_validate_project.py` (363 tests OK), `.env.example` created covering all 21 runtime
+configuration knobs, and full project validation verified green.
 
 ## Current objective
 

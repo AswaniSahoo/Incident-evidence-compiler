@@ -438,7 +438,12 @@ def _validate_dataset_policy(errors: list[str]) -> None:
     archive_names = {"RE2-OB.zip", "RE2-SS.zip", "RE2-TT.zip"}
     synthetic_root = ROOT / "tests" / "fixtures" / "rcaeval"
     for path in ROOT.rglob("*"):
-        if ".git" in path.parts:
+        if (
+            ".git" in path.parts
+            or ".venv" in path.parts
+            or ".claude" in path.parts
+            or ".serena" in path.parts
+        ):
             continue
         if path.name in archive_names:
             errors.append(f"raw RCAEval archive is forbidden: {path.relative_to(ROOT)}")
@@ -601,11 +606,17 @@ def _validate_text_hygiene(errors: list[str]) -> None:
             not path.is_file()
             or ".git" in path.parts
             or ".venv" in path.parts
+            or ".claude" in path.parts
+            or ".serena" in path.parts
             or "__pycache__" in path.parts
             or (".kiro" in path.parts and "logs" in path.parts)
         ):
             continue
-        if path.suffix not in TEXT_SUFFIXES and path.name not in {".editorconfig", ".gitignore"}:
+        if path.suffix not in TEXT_SUFFIXES and path.name not in {
+            ".editorconfig",
+            ".gitignore",
+            ".env.example",
+        }:
             continue
         text = path.read_text(encoding="utf-8")
         relative = path.relative_to(ROOT)
