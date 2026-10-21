@@ -1,9 +1,9 @@
 """Opt-in PostgreSQL integration tests for the psycopg driver and migration runner.
 
 These require a real PostgreSQL reachable via the ``DATABASE_URL`` environment variable
-(see docker-compose.yml) and are skipped otherwise, so the locked CI gate stays hermetic
-and needs no database, network, or credentials. The two-worker SKIP LOCKED race test is
-added in the next slice.
+(see docker-compose.yml) and are skipped otherwise, so a local run stays hermetic and
+needs no database, network, or credentials. CI sets ``DATABASE_URL`` against a
+``postgres:16`` service container, so these run on every push.
 
 Run locally:
     docker compose up -d
