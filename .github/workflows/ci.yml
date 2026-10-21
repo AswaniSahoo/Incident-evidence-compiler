@@ -10,6 +10,24 @@ permissions:
 jobs:
   governance:
     runs-on: ubuntu-latest
+    # Throwaway PostgreSQL for the integration suite (tests/test_persistence_postgres.py).
+    # Same major version and local-only credentials as docker-compose.yml; not a secret.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: iec
+          POSTGRES_PASSWORD: iec
+          POSTGRES_DB: iec
+        ports:
+          - 5432:5432
+        # -h localhost forces TCP, so the check fails until the real server is up,
+        # not the socket-only server the image runs during initialisation.
+        options: >-
+          --health-cmd "pg_isready -h localhost -U iec -d iec"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -31,8 +49,13 @@ jobs:
       - name: Compile source and governance code
         run: uv run --locked python -m compileall -q src scripts .kiro/hooks tests
 
+      # DATABASE_URL enables the PostgreSQL integration tests against the service above.
+      # Still skipped on purpose: the live Gemini smoke test (needs a paid GEMINI_API_KEY)
+      # and the RE2-OB real-data test (needs the external dataset at IEC_RE2_OB_ROOT).
       - name: Run unit tests
         run: uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
+        env:
+          DATABASE_URL: postgresql://iec:iec@localhost:5432/iec
 
       - name: Lint
         run: uv run --locked ruff check .
