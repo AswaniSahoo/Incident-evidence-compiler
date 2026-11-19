@@ -18,7 +18,10 @@ Aggregate, label-free artifacts: `docs/evaluation/re2-tt-baseline.json`,
   locators never leave the evaluation sidecar.
 - Opening TT requires an explicit authorization (`authorize_sealed_split(confirmed=True,
   reason=...)`, `src/incident_evidence_compiler/evaluation/rcaeval/ids.py`). Unauthorized by
-  default.
+  default. This holds for the evaluation loader, `RcaevalAdapter`. The served demo source does
+  not check it: `IEC_TELEMETRY=rcaeval` with `IEC_RE2_SPLIT=TT` opens TT with no permit
+  (`src/incident_evidence_compiler/runtime/telemetry.py:54-55`), listed under Known gaps in
+  `README.md`.
 
 ## Frozen configuration (locked before the run)
 
@@ -49,9 +52,9 @@ Before running: record the exact `git rev-parse HEAD` here so the freeze is audi
    `GEMINI_API_KEY`.
 3. A one-line sealed-authorization seam in `scripts/run_evaluation.py` (a `--sealed-confirm
    "<reason>"` flag that builds a `SealedSplitPermit` and passes it to `RcaevalAdapter.load`).
-   This seam is intentionally **not** added yet, it is the single small code change that
-   turns the run into one command, and it should land in its own reviewed slice with a test,
-   right before the run. Until then the loader denies TT by design.
+   The seam exists: it landed in freeze commit `0a7854e` (`scripts/run_evaluation.py:59-64`,
+   `171-189`) with three tests (`tests/test_evaluation.py:311`, `328`, `336`). Without the flag
+   the script refuses TT.
 
 ## Procedure (one pass, both arms)
 
@@ -88,7 +91,10 @@ uv run --locked python scripts/run_evaluation.py \
 ## Results log
 
 Overall metrics (an abstention counts as a miss, so accuracy reflects coverage). 90 cases,
-0 skipped, 0 invalid evidence IDs on both arms.
+0 skipped. The Invalid IDs column is 0 by construction, not a measurement: the verifier can
+only cite IDs of ledger entries it was given, and the baseline arm reports the scorer's default
+of 0 (`src/incident_evidence_compiler/evaluation/harness/runner.py:138-140`, `200-206`;
+`src/incident_evidence_compiler/evaluation/harness/scoring.py:59`).
 
 | Date | Freeze commit | Arm | Top-1 | Top-3 | MRR | Abstention | Invalid IDs |
 |---|---|---|---|---|---|---|---|
@@ -112,8 +118,6 @@ authoritative split is the machine-readable `dataset.split` field, which is `"TT
 
 ## Future upgrades (backlog, not part of the one held-out run)
 
-- Add the `--sealed-confirm` seam + a unit test asserting TT is denied without it and permitted
-  with it (the small enabling slice above).
 - If RE2-SS is later promoted to a secondary development set (open decision), calibrate the
   abstention threshold there, never on TT.
 - OpenTelemetry spans + estimated-cost metric during the sealed rerun (ADR 0015 deferral).

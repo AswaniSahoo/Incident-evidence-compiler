@@ -1,6 +1,21 @@
 # 0016, Runnable server entrypoint and container image (Phase 9)
 
 - Status: accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - Configuration also accepts `IEC_TELEMETRY=prometheus` with `IEC_PROM_URL`, `IEC_PROM_QUERIES`,
+    `IEC_PROM_STEP_SECONDS`, `IEC_PROM_TIMEOUT_SECONDS` and `IEC_PROM_BEARER_TOKEN` (ADR 0017), and
+    `IEC_BASELINE_MIN_SCORE` (`runtime/config.py:16, 164-168, 184-185, 193`).
+  - `RcaevalTelemetrySource` keys cases by an opaque digest of the directory path, not the path
+    (`runtime/telemetry.py:32-40, 70`), but keeps the label-bearing locators in memory for an
+    operator-only `locator_for` (`runtime/telemetry.py:60, 71, 80-86`).
+  - It never calls `guard_split`, so `IEC_RE2_SPLIT=TT` or `SS` loads without a permit
+    (`runtime/telemetry.py:54-55`).
+  - Production telemetry ingestion now exists: `IEC_TELEMETRY=prometheus` wires
+    `PrometheusTelemetrySource` (`runtime/server.py:72-79`).
+  - PostgreSQL mode never creates the schema: the server only builds the factory
+    (`runtime/server.py:47-51`), and `apply_migrations` is called only from a test
+    (`tests/test_persistence_postgres.py:119`).
 - Date: 2026-07-18
 - Deciders: Aswani
 - Supersedes: none

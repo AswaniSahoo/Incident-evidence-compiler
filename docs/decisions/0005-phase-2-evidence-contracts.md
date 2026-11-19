@@ -1,6 +1,9 @@
 # ADR 0005: Phase 2 Evidence Contracts
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged history. Paths are under `src/incident_evidence_compiler/`.
+  - The ID domain separator ends in a NUL byte, `b"incident-evidence-compiler.metric-shift-evidence.v1\x00"` (`domain/evidence/_identity.py:17`); the `\\x00` in the formula below is an escaping slip, not a literal backslash.
+  - `metric_evidence_entry_json`, the per-entry JSON that the worker persists, emits no `schema_version` key and none of the ledger bindings (`domain/serialization.py:246-255, 520-531`); the version is stored in the evidence row's `schema_version` column instead (`application/worker.py:263`).
 - Date: 2026-07-16
 
 ## Context

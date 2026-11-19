@@ -1,6 +1,10 @@
 # ADR 0010: Missing and non-finite metric cells are gaps, not failures
 
 - Status: Accepted
+- Status note, 2026-11-19: drops are not auditable today. `dropped_cell_count` is set on
+  `ParsedCase` (`src/incident_evidence_compiler/evaluation/rcaeval/csv_loader.py:226`), but no
+  caller reads, logs or records it, and the Prometheus mapper drops non-finite samples without
+  counting them (`src/incident_evidence_compiler/runtime/prometheus.py:200-202`).
 - Date: 2026-07-17
 - Decision owners: Aswani and the project orchestrator
 

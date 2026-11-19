@@ -1,6 +1,7 @@
 # ADR 0003: Development and Publication Workflow
 
 - Status: Accepted
+- Status note, 2026-11-19: the branch naming below was not always followed. Of the merged pull requests (`git log --merges` at `e02d918`), #1 and #2 came from `phase/09-runnable-entrypoint`, but #3 came from `step/04-sealed-tt-eval` and #4 and #5 from `feat/prometheus-telemetry` and `feat/payment-incident-demo`; ADR 0019 was implemented on `main` directly (`0019-expose-baseline-ranking.md:4`).
 - Date: 2026-07-16
 
 ## Decision

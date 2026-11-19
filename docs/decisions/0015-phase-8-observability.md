@@ -1,6 +1,13 @@
 # ADR 0015: Observability, Prometheus metrics (Phase 8)
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - `iec_provider_timeouts_total` counts only the worker's own deadline. A `ProviderTimeoutError`
+    from the Gemini client's per-attempt deadline is recorded as `provider_unavailable` and not
+    counted (`application/worker.py:219-223`, `llm/gemini.py:171-174`).
+  - A job whose investigation row is missing is set `FAILED` with no `iec_worker_jobs_total`
+    increment (`application/worker.py:148-151`).
 - Date: 2026-07-18
 - Decision owners: Aswani and the project orchestrator
 

@@ -1,6 +1,7 @@
 # Project Context
 
-Last verified: 2026-09-03
+Last verified: 2026-09-03; drift corrections checked against the code at `e02d918` on 2026-11-19
+(what the code does not yet do is listed under Known gaps in `README.md`).
 
 ## Current phase
 
@@ -10,8 +11,10 @@ ranking as an additive nullable `baseline_ranking` field) are **accepted and mer
 (PR #5 plus direct commits). ADR 0018 reskins the ADR 0017 profile into a bank-router deploy
 incident (`bank_router` faulty, `ledger_db` a deliberate healthy decoy) with no domain, port, or
 verifier change; ADR 0019 persists the ranking additively (migration `0002`, verification schema
-untouched). The full locked gate is green (362 tests), and the Postgres `SKIP LOCKED` durability
-suite was verified against `postgres:16` (devlog 0014).
+untouched). The full locked gate is green. The suite has 363 tests, 10 of them skip-gated on
+infrastructure, so a hermetic run passes 353 and a run with `DATABASE_URL`, as in CI, passes 361.
+The Postgres `SKIP LOCKED` durability suite was verified against `postgres:16` (devlog 0014) and
+now runs in CI against a `postgres:16` service.
 A live **Vertex** run (2026-08-23, `gemini-2.5-flash`, project `iec-live-demo`, isolated from the
 ambient `climate-risk-agent` project) had Gemini propose four predicates; the verifier returned
 `supported` only for `bank_router_latency_increase` (cited evidence `sha256:758e…`) and `unknown`
@@ -22,8 +25,9 @@ A second Vertex demo run (2026-08-31) had Gemini propose only checkout predicate
 returned `unknown` on both, zero false assertions, while the persisted `baseline_ranking` placed
 the injected `bank_router` fault first. The gemini arm was also re-evaluated on RE2-OB with
 `gemini-3.7-flash` under the frozen configuration (artifact
-`docs/evaluation/re2-ob-gemini-3.7-flash.json`): Top-1 0.068, abstention 0.455, zero invalid
-citations. Both are recorded in devlog 0018. RE2-TT remains sealed, opened exactly once.
+`docs/evaluation/re2-ob-gemini-3.7-flash.json`): Top-1 0.068, abstention 0.455; its invalid-citation
+count is 0 by construction, since the verifier can only cite ledger IDs. Both are recorded in
+devlog 0018. RE2-TT remains sealed, opened exactly once.
 Pre-submission pass (2026-09-02, devlog 0019): an adversarial review found five defects at the
 edges (poison-job livelock, fault labels reaching the prompt in rcaeval demo mode, a blank
 idempotency key returning 500, dict-lookup token comparison, driver detail in exception chains),
@@ -77,7 +81,7 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 - RCAEval release `1.2.0` is pinned at commit `bc49dbd85bd14032101fb9a69a5a37e9d6d55178`.
 - RE2-OB is development/calibration, RE2-TT is sealed by default, and RE2-SS is reserved.
 - Raw RCAEval data is not committed or redistributed; the pinned upstream RCAEval repository states MIT for the authors' code/datasets while Zenodo archive metadata states `cc-by-4.0`, and both notices are documented.
-- Runtime code remains Python 3.12 standard-library-only; Ruff `0.15.13`, mypy `2.1.0`, and uv `0.11.17` remain exactly pinned development/build tools.
+- Runtime code targets Python 3.12. The domain package is standard-library-only; the runtime declares exactly four pinned dependencies in `pyproject.toml`, each sanctioned by its phase ADR: `psycopg[binary]==3.3.4` (ADR 0011), `google-genai==2.12.1` (ADR 0012), and `fastapi==0.139.2` with `uvicorn[standard]==0.51.0` (ADR 0013). Ruff `0.15.13`, mypy `2.1.0`, and uv `0.11.17` remain exactly pinned development/build tools.
 - The Phase 1 baseline emits ranked suspicion or abstention, never a causal claim.
 - Phase 2 binds every metric evaluation to immutable provenance, uses content-bound evidence IDs, and verifies only flat descriptive increase/decrease predicates.
 - The verifier uses the frozen baseline minimum score inclusively; global ranking margin remains diagnostic and does not establish or suppress a signal-specific descriptive observation.
@@ -85,10 +89,10 @@ Incident Evidence Compiler: a multi-tenant asynchronous service that compiles mi
 - Phase 3 adds bounded change/deployment events as a separate `change-event-ledger.v1` with content-bound IDs under a distinct domain separator, leaving the frozen metric ledger and its IDs unchanged.
 - Change events are verified as descriptive temporal co-occurrence only, independently of metric shifts; no cross-signal correlation and no causal inference.
 - Change co-occurrence semantics are three-valued: in-phase presence is `SUPPORTED`, presence recorded only outside the asserted phase is `REFUTED` (the ledger is the authoritative record of observed changes), and total absence is `UNKNOWN`.
-- PostgreSQL will be the durable source of truth and initial job queue in a later phase.
+- PostgreSQL is the durable source of truth and the job queue (ADR 0011, ADR 0013).
 - Redis is initially limited to disposable cross-process admission control in a later phase.
 - Model-generated SQL, shell commands, remediation, generic chat, LangGraph, MCP, and multi-agent runtime behavior are out of v1 scope.
-- Gemini is accessed through one asynchronous provider interface in a later phase; tests use a deterministic fake.
+- Gemini is accessed through one asynchronous provider interface, `LLMClient` (ADR 0012); tests use a deterministic fake.
 - Every accepted material conclusion must resolve to same-tenant, same-run evidence and a passing verifier trace.
 
 ## Provenance
@@ -97,13 +101,14 @@ Reference prototype: https://github.com/yashprogrammer/EnterpriseRAG_live.git at
 
 ## Current repository state
 
-Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. The Phase 3 boundary is `a17aa7b`. Since then, `main` advanced through the evidence-module refactor (`fc5f057`), ADR 0009 (`21bd72e`), and ADR 0010 (`773d39d`), and is published to and tracking the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`) at `773d39d`. Local AI-assistant working notes (`CLAUDE.md`) are excluded via `.gitignore` and were removed from local history prior to the first push; no such traces exist in the published repository. RE2-OB has been downloaded and checksum-verified but is stored and extracted outside the repository root and is never committed; only synthetic fixtures are committed. RE2-TT stays sealed; RE2-SS reserved.
+Phase 1 is accepted at local commit `8d0ba39`. Phase 2 is accepted at commit `29b3212`. The Phase 3 boundary is `a17aa7b`. Since then, `main` advanced through the evidence-module refactor (`fc5f057`), ADR 0009 (`21bd72e`), ADR 0010 (`773d39d`), Phases 4 to 9 (ADRs 0011 to 0016), ADRs 0017 to 0019, and the CI PostgreSQL job, and is published to and tracking the GitHub remote `origin` (`AswaniSahoo/Incident-evidence-compiler`) at `e02d918` (checked with `git ls-remote` on 2026-11-19). Local AI-assistant working notes (`CLAUDE.md`) are excluded via `.gitignore` and were removed from local history prior to the first push; no such traces exist in the published repository. RE2-OB has been downloaded and checksum-verified but is stored and extracted outside the repository root and is never committed; only synthetic fixtures are committed. RE2-TT stays sealed; RE2-SS reserved.
 
 ## Validation
 
 Phase 9 uses the same locked clean-checkout gate as Phases 1–8, verified green on 2026-07-18
 (unittest with PostgreSQL and Gemini-live tests skipped; ruff/format/mypy clean; validator
-full pass), plus a container build and smoke test:
+full pass), plus a container build and smoke test. CI now also sets `DATABASE_URL` against a
+`postgres:16` service, so the PostgreSQL suite runs there (`.github/workflows/ci.yml`):
 
 - `uv sync --locked`
 - `uv run --locked python -m compileall -q src scripts .kiro/hooks tests`
@@ -114,7 +119,7 @@ full pass), plus a container build and smoke test:
 - `uv run --locked python scripts/validate_project.py`
 - `docker build -t incident-evidence-compiler:ci .` then a `/health` + `/metrics` smoke run
 - `kiro-cli agent validate --path .kiro/agents/incident-orchestrator.json`
-- `git diff --check`
+- `git show --check --oneline --format=fuller HEAD` (the CI whitespace gate)
 - One independent Phase 9 implementation review
 
 ## Accepted (recent)
@@ -142,7 +147,8 @@ full pass), plus a container build and smoke test:
   (`FirstSignalLLMClient`) and a labelled RCAEval-backed demo telemetry source
   (`RcaevalTelemetrySource`) enabling a credential-free end-to-end boot. A multi-stage non-root
   `uv` image health-checks `/health` with the stdlib, and a shell-based CI job builds and smoke-
-  tests it. No new runtime dependency; production telemetry ingestion remains an explicit non-goal.
+  tests it. No new runtime dependency. Production telemetry ingestion was an explicit non-goal of
+  ADR 0016; ADR 0017 later added it (the Prometheus bullet above).
 - Observability is Prometheus-only and dependency-free (ADR 0015, devlog 0009): a
   standard-library `observability` package renders the Prometheus text exposition format; the
   `Worker` records `iec_worker_jobs_total{outcome}`, `iec_worker_stage_duration_seconds{stage}`,
@@ -173,11 +179,11 @@ Two items this file previously listed as pending are done: `feat/prometheus-tele
 `main` at `bd1bb64` (PR #4), and ADR 0019 shipped the `baseline_ranking` field (migration `0002`,
 serializer `baseline-ranking.v1`, `api/app.py`).
 
-Deferred (README roadmap / backlog, not blockers): surfacing `baseline_ranking` where a reader can
-see it, the field ships over HTTP but `scripts/demo_live_investigation.py` never prints it and the
-README API section never documents it; process-wide vs per-tenant PromQL selectors; and a refactor
-so the production path stops importing `evaluation.harness.baseline_inputs` for the scale-floor
-policy (ADR 0017 item 5 sanctions the current import).
+Deferred (README roadmap / backlog, not blockers): process-wide vs per-tenant PromQL selectors; and
+a refactor so the production path stops importing `evaluation.harness.baseline_inputs` for the
+scale-floor policy (ADR 0017 item 5 sanctions the current import). Surfacing `baseline_ranking` is
+done: both demo drivers print it (`scripts/demo_live_investigation.py:146`,
+`scripts/demo_hermetic_investigation.py:275`) and the README HTTP API section documents it.
 
 ### Earlier, still true
 
@@ -185,10 +191,10 @@ Step 4 (sealed RE2-TT held-out run) is DONE, executed once on 2026-07-19, on bra
 `step/04-sealed-tt-eval`. A `--sealed-confirm "<reason>"` seam was added to
 `scripts/run_evaluation.py` with three tests (commit `0a7854e`, the frozen run commit); RE2-TT
 was downloaded + md5-verified + extracted outside the repo; both arms ran at `0a7854e` with the
-config identical to RE2-OB (no tuning against TT). Held-out results (90 cases, 0 skipped, 0
-invalid IDs): baseline Top-1 0.767 / Top-3 0.878 / MRR 0.833; verifier-gated Gemini Top-1 0.156
-(0.368 answered), abstains 52/90. Aggregate label-free artifacts + protocol log + README
-held-out table committed (`4f84e86`). Branch not yet pushed (build-in-public push is Aswani's
+config identical to RE2-OB (no tuning against TT). Held-out results (90 cases, 0 skipped; the 0
+invalid IDs hold by construction): baseline Top-1 0.767 / Top-3 0.878 / MRR 0.833;
+verifier-gated Gemini Top-1 0.156 (0.368 answered), abstains 52/90. Aggregate label-free
+artifacts + protocol log + README held-out table committed (`4f84e86`). Branch not yet pushed (build-in-public push is Aswani's
 call; automated shell pushes stay disabled).
 
 Known limitation surfaced during the run (NOT fixed, by decision): the evaluation harness loads

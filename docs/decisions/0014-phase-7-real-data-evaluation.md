@@ -1,6 +1,16 @@
 # ADR 0014: Real-data integration and development evaluation (Phase 7)
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - The zero invalid-evidence-ID count is not evidence of gating: it is zero by construction.
+    The harness counts verifier-cited IDs missing from the ledger
+    (`evaluation/harness/runner.py:138-140`), the verifier only cites ledger entries
+    (`domain/verifier.py:145-146`), and the baseline arm reports the scorer's default of 0
+    (`evaluation/harness/runner.py:200-206`, `evaluation/harness/scoring.py:59`).
+  - The harness calls the domain and the LLM parser directly (`evaluation/harness/runner.py:22-46`);
+    it never runs the `Worker` or a `TelemetrySource`, so real data reached the domain through
+    the harness, not through the worker.
 - Date: 2026-07-18
 - Decision owners: Aswani and the project orchestrator
 
