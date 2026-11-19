@@ -1,6 +1,15 @@
 # ADR 0009: Guardrailed local acquisition of RCAEval RE2-OB
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history.
+  - The dataset-policy walk skips every path under `.git`, `.venv`, `.claude` or `.serena`
+    (`scripts/validate_project.py:441-447`), and a file with `sidecar` in its name is allowed
+    under any `src` or `tests` directory as well as under `artifacts/evaluation-sidecars/`
+    (`scripts/validate_project.py:455-463`). Those paths fall outside the guarantee described here.
+  - CI is no longer hermetic in the sense of this record: it runs the PostgreSQL suite against a
+    live `postgres:16` service container (`.github/workflows/ci.yml:15-30, 52-58`). It still needs
+    no real archive and no credentials beyond throwaway local ones.
 - Date: 2026-07-17
 - Decision owners: Aswani and the project orchestrator
 

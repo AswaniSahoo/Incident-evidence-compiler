@@ -1,6 +1,14 @@
 # ADR 0012: Async LLM provider boundary (Phase 5)
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - `HypothesisRequest` also carries the incident (`llm/client.py:19-25`).
+  - `GeminiLLMClient` also has a `from_vertex` constructor (`llm/gemini.py:129-151`), which the
+    runtime uses for `IEC_LLM_PROVIDER=vertex` (`runtime/server.py:58-64`); the SDK is imported
+    lazily in both constructors (`llm/gemini.py:113, 144`).
+  - The parser checks the 32-predicate budget before domain validation and the allow-list after
+    it (`llm/parsing.py:58-59, 62-77`).
 - Date: 2026-07-17
 - Decision owners: Aswani and the project orchestrator
 

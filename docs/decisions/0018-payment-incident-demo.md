@@ -1,6 +1,10 @@
 # 0018, A payment-infrastructure incident demo (honest reskin, no domain change)
 
 - Status: accepted
+- Status note, 2026-11-19: the suite now has 363 tests, 10 of them skip-gated on infrastructure
+  (`python -m unittest discover -s tests` at `e02d918`). The README has no "As a
+  payment-infrastructure incident investigator" section; the payments framing lives in its "Who
+  this is for" section and in the payment-routing scenario of its demo section.
 - Date: 2026-08-23 (accepted 2026-08-23, implemented on `feat/payment-incident-demo`)
 - Deciders: Aswani
 - Supersedes: none

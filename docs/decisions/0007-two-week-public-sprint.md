@@ -2,6 +2,7 @@
 
 - Date: 2026-07-17
 - Status: Accepted
+- Status note, 2026-11-19: `MASTER-PLAN.md`, which this record makes the governing plan, is git-ignored (`.gitignore:56`) and is not in the repository, so the plan it cites cannot be read here. There is no OpenTelemetry code or dependency (`pyproject.toml:11-16`); observability is Prometheus-only (ADR 0015).
 
 ## Context
 

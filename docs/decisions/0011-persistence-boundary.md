@@ -1,6 +1,24 @@
 # ADR 0011: Durable persistence boundary (Phase 4)
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - There is no `persistence/postgres/queue.py`; the `SKIP LOCKED` claim lives in
+    `persistence/postgres/unit_of_work.py:280-315`.
+  - `LeaseLostError` and `MigrationError` do not exist (`persistence/errors.py`). Only
+    `UniqueViolation` is mapped to a typed error (`persistence/postgres/unit_of_work.py:216, 275,
+    365, 455`); connection and other driver errors cross the boundary as raw psycopg exceptions.
+  - The unit of work does not commit on clean exit. Work is kept only by an explicit `commit()`;
+    exit rolls back on error and closes the connection (`persistence/repositories.py:108-113`,
+    `persistence/postgres/unit_of_work.py:523-547`).
+  - The claim SQL takes the caller's clock (`now` argument) rather than the database `now()`, and
+    also reclaims `claimed` rows whose lease has expired
+    (`persistence/postgres/unit_of_work.py:280-303`).
+  - Lease expiry is not the crash-recovery path. The worker claims, runs and commits a job in one
+    transaction (`application/worker.py:136-180`), so a crashed worker's transaction is rolled
+    back and the job returns to its pre-claim state.
+  - CI now runs the integration suite against a live `postgres:16` service
+    (`.github/workflows/ci.yml:15-30, 52-58`), the alternative this record rejected.
 - Date: 2026-07-17
 - Decision owners: Aswani and the project orchestrator
 

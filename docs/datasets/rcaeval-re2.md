@@ -15,6 +15,8 @@
 
 The API's publication date and record creation date are different fields and are intentionally recorded separately.
 
+The same pins are recorded machine-readably in `rcaeval-re2.manifest.json`. `load_manifest` checks that file against values hard-coded in `src/incident_evidence_compiler/evaluation/rcaeval/manifest.py:117-129`, but only tests call it; the `release` and `release_commit` written into the evaluation artifacts come from separate literals in `src/incident_evidence_compiler/evaluation/rcaeval/adapter.py:134-135`.
+
 ## License record
 
 The pinned upstream RCAEval repository's root `LICENSE` is MIT, and its release README says code implemented by the authors and their datasets are distributed under MIT. The Zenodo API metadata for record `14590730` identifies the archive license as `cc-by-4.0`.
@@ -45,7 +47,7 @@ Its evaluator recursively discovers `data.csv`. Only when no `data.csv` exists a
 
 Phase 1 intentionally uses a safer per-case rule: prefer `data.csv` within a case directory, otherwise use `simple_metrics.csv`. A mixed-tree synthetic test records this deliberate difference.
 
-The source path and parsed labels are evaluation metadata and must never enter investigation code.
+The source path and parsed labels are evaluation metadata and must never enter investigation code. The evaluation harness meets this. The served demo source, `RcaevalTelemetrySource`, does not fully: it keeps each case's source locator, which encodes `<service>_<fault>`, in memory for an operator-only `locator_for` lookup (`src/incident_evidence_compiler/runtime/telemetry.py:60, 71, 80-86`). The worker, the prompt and reports only ever see its opaque `case-<digest>` id. This is listed under Known gaps in `README.md`.
 
 ## Multi-source compatibility note
 
@@ -67,7 +69,7 @@ The notebook downloads a mutable release asset, so these names are compatibility
 
 Investigation code may receive:
 
-- A random UUID case ID assigned at the evaluation boundary
+- A random UUID case ID assigned at the evaluation boundary (the served demo source uses an opaque `case-<digest>` of the source locator instead, `src/incident_evidence_compiler/runtime/telemetry.py:32-40`)
 - System identifier (`OB`, `SS`, or `TT`)
 - UTC telemetry window and injection timestamp
 - Service and signal names present in telemetry columns
@@ -83,4 +85,4 @@ An evaluation-only sidecar owns:
 
 The sidecar is local and ignored. It is never passed to investigation code. Tests inject a deterministic ID factory and verify serialization, object representations, captured logs, and malformed-input errors contain no locator or ground-truth values.
 
-RE2-TT access is denied by default and requires an explicit sealed-data override. Held-out scores are not produced in Phase 1 unless Aswani provides the archive and explicitly authorizes opening the sealed split.
+In the evaluation loader, RE2-TT access is denied by default and requires an explicit sealed-data override (a `SealedSplitPermit`), and RE2-SS is refused outright (`src/incident_evidence_compiler/evaluation/rcaeval/ids.py:46-54`, called from `src/incident_evidence_compiler/evaluation/rcaeval/adapter.py:101`). The served demo source does not apply that guard: it calls `parse_split` and `validate_root` but never `guard_split`, so `IEC_TELEMETRY=rcaeval` with `IEC_RE2_SPLIT=TT` loads the sealed split with no permit, and `IEC_RE2_SPLIT=SS` loads the reserved one (`src/incident_evidence_compiler/runtime/telemetry.py:54-55`). This is listed under Known gaps in `README.md`. Held-out scores are not produced in Phase 1 unless Aswani provides the archive and explicitly authorizes opening the sealed split.

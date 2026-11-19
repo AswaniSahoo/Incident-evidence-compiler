@@ -1,6 +1,15 @@
 # 0017, Production telemetry ingestion via Prometheus
 
 - Status: accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - The Prometheus client is standard-library-only (`runtime/prometheus.py:11-18`), but the
+    runtime as a whole is not: `pyproject.toml:11-16` declares four dependencies.
+  - `IEC_PROM_STEP_SECONDS` and `IEC_PROM_TIMEOUT_SECONDS` are parsed in every telemetry mode, so
+    a bad value stops startup even without `prometheus`; the other three `IEC_PROM_*` knobs are
+    read only in `prometheus` mode (`runtime/config.py:164-168, 184-185`).
+  - `IEC_PROM_TIMEOUT_SECONDS` becomes the `urllib` socket timeout for each request, not a
+    wall-clock deadline (`runtime/prometheus.py:106-111, 138`).
 - Date: 2026-08-20 (accepted 2026-08-23, implemented on `feat/prometheus-telemetry`)
 - Deciders: Aswani
 - Supersedes: none

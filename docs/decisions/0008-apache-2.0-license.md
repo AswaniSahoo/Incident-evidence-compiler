@@ -1,6 +1,9 @@
 # ADR 0008: Apache-2.0 license for the public repository
 
 - Status: Accepted
+- Status note, 2026-11-19: the runtime is no longer standard-library-only. `pyproject.toml:11-16`
+  declares four runtime dependencies, sanctioned by ADRs 0011 to 0013; the domain package still
+  uses only the standard library.
 - Date: 2026-07-17
 - Decision owners: Aswani and the project orchestrator
 

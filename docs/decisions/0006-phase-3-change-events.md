@@ -1,6 +1,16 @@
 # ADR 0006: Phase 3 Change-Event Co-occurrence Evidence
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the
+  record below is unchanged history. Paths are under
+  `src/incident_evidence_compiler/`.
+  - `ChangeEventKey`, `ChangeEvent` and `ChangeEventLog` keep the default
+    dataclass `repr`, not `repr=False` with a bounded `__repr__`
+    (`domain/changes.py:32, 46, 62`).
+  - The open question at the end of this record is settled: the three-valued
+    model is implemented, out-of-phase presence returns `REFUTED`
+    (`domain/change_verifier.py:126-134`), and `PROJECT_CONTEXT.md` lists it
+    under accepted decisions.
 - Date: 2026-07-17
 
 ## Context

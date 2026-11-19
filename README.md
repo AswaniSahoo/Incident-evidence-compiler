@@ -1,7 +1,7 @@
 # Incident Evidence Compiler
 
 [![CI](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml/badge.svg)](https://github.com/AswaniSahoo/Incident-evidence-compiler/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-362_passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-353_passing%2C_10_skip--gated-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
 [![Typed](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 [![Domain](https://img.shields.io/badge/domain-stdlib_only-informational.svg)](#principles-the-ones-i-actually-held)
@@ -17,8 +17,11 @@ or `UNKNOWN`. Nothing the model says is trusted until the verifier agrees, and `
 real answer, not a polite way of saying "no."
 
 The whole thing is built the way I'd build a real backend: framework-independent domain,
-PostgreSQL as the source of truth, a `SKIP LOCKED` worker queue, every external call on a
-deadline, and a test suite that runs with no database, no network, and no credentials.
+PostgreSQL as the source of truth, a `SKIP LOCKED` worker queue, a deadline on the model call and
+a socket timeout on each Prometheus request, and a test suite that runs with no database, no
+network, and no credentials. The worker's telemetry load and every PostgreSQL call, from the
+connect through each statement and commit, have no deadline set in this code yet; see
+[Known gaps](#known-gaps).
 
 ## The system refusing a plausible answer
 
@@ -41,8 +44,11 @@ and the system was still right, because being wrong never became a conclusion. T
 report actually names comes from a separate deterministic ranking that never involves the model
 (see [Results](#results)).
 
-Across 178 evaluated cases, two model generations, and two live runs, the count of invalid
-evidence citations is zero. Everything else about the model may vary; that column does not.
+Across 178 evaluated cases, two model generations, and two live runs, no verdict cited evidence
+outside its ledger, and none can: the verifier only ever cites the ID of a ledger entry it was
+given ([`domain/verifier.py`](src/incident_evidence_compiler/domain/verifier.py)), so that count is
+zero by construction, not a measured result. Everything else about the model may vary; that
+guarantee does not depend on it.
 
 Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-synthetic-data).
 
@@ -58,9 +64,10 @@ Reproduce it in about three minutes: [the demo](#demo-a-real-prometheus-with-syn
 
 Gemini's role is deliberately narrow: it reads signal names from a caller-supplied allow-list and
 proposes which ones shifted. It never sees a metric value. The narrowness is the design, because
-the layer that can hallucinate must not be the layer that decides what is true. The gate held
+the layer that can hallucinate must not be the layer that decides what is true. The same gate ran
 unchanged across two model generations, `gemini-2.5-flash` and `gemini-3.7-flash`, over 88
-fault-injection cases each: zero invalid evidence citations from either. When the model abstains,
+fault-injection cases each. Neither could put evidence the ledger does not hold into a verdict, by
+construction rather than by measurement: the verifier only cites ledger IDs. When the model abstains,
 the report still carries the deterministic ranking, so an abstention costs the reader nothing.
 When it proposes, the only thing it can add is a claim the verifier checked.
 
@@ -71,38 +78,48 @@ Where a model is deliberately not used:
   incident and run identifiers, nothing else.
 - It never decides. Verdicts come from code that does not read the prompt.
 - It never remediates. The verified report is the end of the pipeline.
-- It never writes prose into the record. The only model-authored text that survives is the
-  predicate and hypothesis identifiers, labels the verifier copies but never interprets. No
-  model prose reaches reports, error bodies, or logs.
+- Its text is never interpreted. The only model-authored text that survives is the predicate and
+  hypothesis identifiers, labels the verifier copies into the report but never interprets. Those
+  labels are free text: any non-blank string is accepted, bounded only by the 65,536-character
+  ceiling on the whole proposal, so a model could put prose there and it would reach the report
+  ([Known gaps](#known-gaps)). No model text reaches error bodies or logs.
 
 ## What is actually interesting here
 
 If you read one section, read this one. Every item links to the code or the artifact behind it.
 
-- **The model physically cannot say anything dangerous.** Gemini returns fixed JSON: a signal id
-  drawn from a caller-supplied allow-list, `INCREASE` or `DECREASE`, `ALL` or `ANY`. There is no
-  field for free text, for SQL, or for a shell command.
-  [`llm/parsing.py`](src/incident_evidence_compiler/llm/parsing.py) caps untrusted input at 65,536
-  characters and 32 predicates *before* parsing, checks every signal against the allow-list *after*
-  structural validation, and raises message-free typed errors, so no model-derived string is ever
-  retained or echoed back.
-- **Evidence is content-addressed.** Each ledger entry's ID is a sha256 over its own content, so a
-  citation cannot drift from the thing it cites, and a report replays byte for byte.
+- **The model can only fill in a fixed shape.** Gemini returns fixed JSON: per predicate, a signal
+  id drawn from a caller-supplied allow-list and `INCREASE` or `DECREASE`; per hypothesis, `ALL` or
+  `ANY`. There is no field for SQL or for a shell command. The two identifier fields,
+  `hypothesis_id` and `predicate_id`, are free text: any non-blank string is accepted
+  ([`domain/hypotheses.py`](src/incident_evidence_compiler/domain/hypotheses.py)) and copied into
+  the report. [`llm/parsing.py`](src/incident_evidence_compiler/llm/parsing.py) caps untrusted
+  input at 65,536 characters *before* parsing and at 32 predicates right after JSON decoding (the
+  prompt asks for 1 to 5), checks every signal against the allow-list *after* structural
+  validation, and raises message-free typed errors, so a rejected proposal leaves no model-derived
+  text in any error.
+- **Evidence is content-addressed.** Each ledger entry's ID is a sha256 over a canonical payload of
+  the entry and its bindings (tenant, incident, run, window, policy, decision), so a citation cannot
+  drift from the thing it cites, and a report replays byte for byte. The stored evidence row keeps
+  only a subset of that payload, so the ID cannot be recomputed from it, and no HTTP route serves
+  evidence yet ([Known gaps](#known-gaps)).
   [`domain/evidence/`](src/incident_evidence_compiler/domain/evidence/)
 - **`UNKNOWN` is a verdict, not a failure.** Tenant or run mismatch, causal claims, and weak
   evidence all fail closed to `UNKNOWN` rather than collapsing to "no."
   [`domain/verifier.py`](src/incident_evidence_compiler/domain/verifier.py)
-- **Malformed telemetry cannot exist as a domain object.** `NaN`, infinities, and non-monotonic
-  timestamps are rejected in `__post_init__`, so no downstream code has to remember to check for
-  them. [`domain/metrics.py`](src/incident_evidence_compiler/domain/metrics.py)
+- **Malformed telemetry cannot exist as a domain object.** `NaN` and infinities are rejected in
+  `MetricPoint.__post_init__`, and timestamps that do not strictly increase are rejected in the
+  `MetricSignal` constructor, so no downstream code has to remember to check for them.
+  [`domain/metrics.py`](src/incident_evidence_compiler/domain/metrics.py)
 - **The untrusted boundaries are fuzzed, and the fuzzer itself was audited.** 3,000 generated
   hostile inputs assert that only typed errors ever escape. The first version passed while covering
   the allow-list branch zero times out of 1,500 cases; measuring the outcome distribution exposed
   that, and a hallucinated-signal strategy took it to 133.
   [`tests/test_fuzz_boundaries.py`](tests/test_fuzz_boundaries.py),
   [devlog 0016](docs/devlog/0016-boundary-fuzzing-and-hygiene.md)
-- **The job queue is real.** `SELECT ... FOR UPDATE SKIP LOCKED` with leases, retries and idempotent
-  commits, verified against a real `postgres:16` by a two-worker race test.
+- **The job queue is real.** `SELECT ... FOR UPDATE SKIP LOCKED` with leases, capped retries,
+  idempotent creation and evidence appends, and a write-once report, verified against a real
+  `postgres:16` by a two-worker race test. Retries do not back off yet ([Known gaps](#known-gaps)).
   [devlog 0014](docs/devlog/0014-postgres-skip-locked-evidence.md)
 - **The evaluation was sealed.** RE2-TT was opened exactly once, against a frozen commit, with no
   tuning against it. [Protocol](docs/evaluation/re2-tt-sealed-protocol.md)
@@ -117,7 +134,8 @@ unverified model claim into a postmortem. IEC sits beside your monitoring: it in
 window, lets the model propose what shifted, and hands back only what deterministic code could
 verify against ledgered evidence, with the guesses it refused listed as `UNKNOWN`. It takes no
 action of its own and never sees a transaction. The on-call engineer keeps the decision. What they
-gain is a report where every accepted claim carries a hash they can check.
+gain is a report where every accepted claim carries the content-derived ID of the ledger entry it
+rests on.
 
 The setting is not hypothetical. Razorpay's Oncall Agent post (Razorpay AI Labs, February 2026)
 describes a multi-agent investigator running in shadow mode while its accuracy is validated across
@@ -130,8 +148,9 @@ between issue detection/alert creation time and issue isolation time"
 ([November 2023](https://engineering.razorpay.com/how-automation-contributed-to-improved-systems-availability-developer-productivity-16c992fdb7da)). It is the
 part of an outage spent working out which component to look at. What IEC buys there, measured: on
 the sealed held-out split the deterministic ranking alone puts the faulty service first in 77% of
-incidents and in the top three in 88%, with zero fabricated citations. An on-call engineer starts
-at the right service three times out of four and never chases evidence that does not exist.
+incidents and in the top three in 88%. An on-call engineer starts at the right service three times
+out of four, and never chases evidence that does not exist, by construction rather than by
+measurement: a verdict can only cite ledger entries.
 
 ## Results
 
@@ -153,9 +172,16 @@ Read those rows as a bracket, not a race. The baseline row is the localization t
 carries: it sees the metric values and finds the faulty service. The two Gemini rows are a
 deliberate stress test of the verification gate across model generations. Both models are handed
 signal *names* only, never a value, so they are guessing among ~72 signals. The newer 3.7 Flash
-does not improve on 2.5 Flash when the input is deliberately impoverished, which is the point: the
-column that matters is invalid evidence IDs. **Zero across both models.**
+does not improve on 2.5 Flash when the input is deliberately impoverished, and the gate does not
+need it to: whatever the model proposes, only verifier-checked claims reach the report.
 Handing the model the values would raise its Top-1 and prove nothing about the gate.
+
+The invalid-evidence-IDs column is zero by construction, not a measurement. The harness counts
+verifier-cited IDs that are missing from the ledger
+([`evaluation/harness/runner.py`](src/incident_evidence_compiler/evaluation/harness/runner.py)),
+but the verifier can only cite IDs of ledger entries it was given, and the baseline arm never
+computes the count at all; it reports the scorer's default of 0
+([`evaluation/harness/scoring.py`](src/incident_evidence_compiler/evaluation/harness/scoring.py)).
 
 ### Held-out (sealed RE2-TT)
 
@@ -163,7 +189,9 @@ Opened once, on 2026-07-19, against a frozen configuration (commit `0a7854e`), t
 thresholds and model as the development run, no tuning against TT. 90 cases, 0 skipped. This is
 the [sealed-run protocol](docs/evaluation/re2-tt-sealed-protocol.md) executed exactly once;
 artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),
-[`re2-tt-gemini.json`](docs/evaluation/re2-tt-gemini.json).
+[`re2-tt-gemini.json`](docs/evaluation/re2-tt-gemini.json). Both carry a `notes` string that says
+"development split"; `scripts/run_evaluation.py` writes that string for every split, and the
+artifacts' `dataset.split` field (`TT`) is the authoritative one ([Known gaps](#known-gaps)).
 
 | Arm | Top-1 | Top-3 | MRR | Abstention | Invalid evidence IDs |
 |---|---|---|---|---|---|
@@ -173,7 +201,7 @@ artifacts: [`re2-tt-baseline.json`](docs/evaluation/re2-tt-baseline.json),
 The held-out numbers hold the same shape as development, on a completely different system
 (train-ticket, not the dev split): the deterministic baseline localizes well (Top-1 0.77), and
 the verifier-gated Gemini arm stays conservative, it abstained on 52 of 90 cases rather than
-assert an unverified cause, and again produced **zero** invalid evidence citations. Accuracy
+assert an unverified cause; its invalid-evidence-IDs column is again zero by construction. Accuracy
 drops from the dev split (harder, unseen system), which is the honest and expected direction.
 Method notes: [ADR 0014](docs/decisions/0014-phase-7-real-data-evaluation.md).
 
@@ -201,7 +229,7 @@ flowchart TD
     APP -->|"UnitOfWork port"| DB[("PostgreSQL<br/>source of truth + job queue")]
     Worker["Async worker loop"] -->|"claim job (FOR UPDATE SKIP LOCKED)"| DB
     Worker -->|"TelemetrySource port"| TEL["Telemetry adapter<br/>(Prometheus range query<br/>or RCAEval RE2, bounded)"]
-    Worker -->|"LLMClient port"| LLM["Gemini adapter / FakeLLMClient<br/>(untrusted output)"]
+    Worker -->|"LLMClient port"| LLM["Gemini adapter / FirstSignalLLMClient smoke client<br/>(untrusted output)"]
     Worker --> DOM["Domain (stdlib only)<br/>baseline · evidence ledger · verifier"]
     Worker -->|"persist evidence + report"| DB
     Client -->|"GET status / report"| API
@@ -243,9 +271,13 @@ sequenceDiagram
     API-->>C: verdicts + evidence IDs (or 409 if not ready)
 ```
 
-The call out to the model is bounded by a per-attempt deadline. A provider failure is retried
-and then gives up; malformed model output is terminal and records only a stable error code,
-never the model's text. A stalled model can't wedge the worker.
+The call out to the model is bounded by a per-attempt deadline. A provider failure is retried,
+immediately and with no backoff yet, until the job has used three attempts, and then gives up;
+malformed model output is terminal and records only a stable error code, never the model's text.
+A stalled model can't wedge the worker, but a stalled telemetry source or database still can:
+neither the telemetry load nor any PostgreSQL statement has a deadline yet
+([Known gaps](#known-gaps)). If an iteration raises anything else, the in-process loop logs the
+traceback and backs off for the idle interval instead of dying.
 
 ## What the verifier actually promises
 
@@ -255,7 +287,7 @@ Every predicate resolves to exactly one of three verdicts, and `UNKNOWN` fails c
 |---|---|---|
 | `SUPPORTED` | The metric shifted in the asserted direction, at or above the frozen minimum score. | supporting IDs |
 | `REFUTED` | The eligible metric shifted the *opposite* way. | contradicting IDs |
-| `UNKNOWN` | Evidence is missing, stale, ineligible, too weak, context-mismatched, or the claim is causal. | none |
+| `UNKNOWN` | Evidence is missing, ineligible, shows no directional shift, is too weak or context-mismatched, or the claim is causal. | none |
 
 A composed hypothesis is either `ALL` (every predicate must hold) or `ANY` (at least one). A
 causal claim, or a tenant/incident/run that doesn't match the ledger, comes back `UNKNOWN` by
@@ -291,6 +323,11 @@ uv run --locked mypy src tests
 uv run --locked python scripts/validate_project.py
 ```
 
+The suite has 363 tests. Ten are skip-gated on infrastructure: eight PostgreSQL tests need
+`DATABASE_URL`, one live Gemini test needs `GEMINI_API_KEY`, and one real-data test needs
+`IEC_RE2_OB_ROOT`. A hermetic run therefore reports 353 passing; CI sets `DATABASE_URL`, so 361
+pass there.
+
 ## Run the service
 
 `python -m incident_evidence_compiler` wires the persistence, LLM, and telemetry ports from
@@ -302,6 +339,20 @@ secret-free message instead of booting into a half-configured state.
 # Credential-free smoke: in-memory store, non-model smoke client, no telemetry.
 IEC_TOKENS=dev-token=tenant-a uv run --locked python -m incident_evidence_compiler
 # serves 127.0.0.1:8000  (GET /health, GET /metrics)
+```
+
+```bash
+# PostgreSQL mode needs its schema first. The server never runs migrations, so apply them once:
+IEC_DATABASE_URL=postgresql://iec@localhost/iec uv run --locked python - <<'EOF'
+import asyncio, os, psycopg
+from incident_evidence_compiler.persistence.migrations import apply_migrations
+
+async def main() -> None:
+    async with await psycopg.AsyncConnection.connect(os.environ["IEC_DATABASE_URL"]) as conn:
+        print("applied:", await apply_migrations(conn))
+
+asyncio.run(main())
+EOF
 ```
 
 ```bash
@@ -330,13 +381,14 @@ uv run --locked python -m incident_evidence_compiler
 | `IEC_TELEMETRY` | `none` | `none`, `rcaeval` (then `IEC_RE2_ROOT` points at an out-of-repo split), or `prometheus`. |
 | `IEC_PROM_URL` | required for `prometheus` | Base URL of the Prometheus to range-query, e.g. `http://prom:9090`. |
 | `IEC_PROM_QUERIES` | required for `prometheus` | PromQL selectors, **semicolon**-separated (PromQL label lists contain commas). |
-| `IEC_PROM_STEP_SECONDS` | `30` | Range-query sample step. |
-| `IEC_PROM_TIMEOUT_SECONDS` | `30` | Per-query deadline. With several selectors, budget accordingly. |
+| `IEC_PROM_STEP_SECONDS` | `30` | Range-query sample step. Validated at startup in every telemetry mode. |
+| `IEC_PROM_TIMEOUT_SECONDS` | `30` | Socket timeout for each range query (the connect and each blocking read), not a wall-clock deadline. With several selectors, budget accordingly. Validated at startup in every telemetry mode. |
 | `IEC_PROM_BEARER_TOKEN` | unset | Optional bearer credential. Never logged and never echoed in an error. |
 | `IEC_BIND_HOST` / `IEC_BIND_PORT` | `127.0.0.1` / `8000` | Listen address (the container image binds `0.0.0.0`). |
 | `IEC_BASELINE_MIN_SCORE` | unset (worker default `1.0`) | Baseline verifier threshold, a finite float `>= 0`. Set `3.0` to run the served system at the configuration the Results tables were measured at. The value in force is serialized into every report's `baseline_ranking.policy`. |
 | `IEC_WORKER_ENABLED` / `IEC_WORKER_IDLE_SLEEP_SECONDS` | `true` / `1.0` | Run the in-process worker, and how long it sleeps when the queue is empty. |
-| `IEC_RE2_SPLIT` / `IEC_GEMINI_MODEL` | `OB` / `gemini-2.5-flash` | RCAEval split for the demo bridge; Gemini model id for both providers. |
+| `IEC_RE2_SPLIT` / `IEC_GEMINI_MODEL` | `OB` / `gemini-2.5-flash` | RCAEval split for the demo bridge (it does not enforce the sealed-split rules, see [Known gaps](#known-gaps)); Gemini model id for both providers. |
+| `IEC_GEMINI_LOCATION` | `us-central1` | Vertex AI region, used only by the `vertex` provider. |
 
 Or run the container. It's a multi-stage uv build, runs as a non-root user, and health-checks
 `/health` with the standard library (no curl in the image):
@@ -349,7 +401,8 @@ curl -fsS http://127.0.0.1:8000/health
 
 One thing I want to be straight about: `IEC_LLM_PROVIDER=fake` is a labelled smoke client, not a
 model, and `IEC_TELEMETRY=rcaeval` is a demo bridge over the benchmark, not a production
-ingestion path. `IEC_TELEMETRY=prometheus` *is* the real ingestion path, and it has been run
+ingestion path; it parses every case of the split into memory at startup.
+`IEC_TELEMETRY=prometheus` *is* the real ingestion path, and it has been run
 against a real Prometheus, fed synthetic data, see [the demo](#demo-a-real-prometheus-with-synthetic-data).
 `/health` and `/metrics` are open on purpose; put them behind your network boundary when you
 deploy.
@@ -369,6 +422,12 @@ open routes.
 | `POST /investigations` | Open an investigation (idempotent via `Idempotency-Key`) | `202 {"investigation_id"}` | `401`, `422 <code>` |
 | `GET /investigations/{id}` | Status | `200 {"investigation_id","status"}` | `401`, `404 investigation_not_found` |
 | `GET /investigations/{id}/report` | Verified report + baseline ranking | `200 {...,"report":{...},"baseline_ranking":{...}}` | `404`, `409 report_not_ready` |
+
+`incident_id` and `run_id` are capped at 200 characters each (`422 invalid_request` beyond that),
+and an `Idempotency-Key` that is blank or longer than 200 characters returns
+`422 invalid_idempotency_key`. A malformed (non-UUID) id returns `404 investigation_not_found`,
+the same as an unknown one. The report route answers `409 report_not_ready` for any investigation
+that has no report, including one that `failed`; the status route tells the two apart.
 
 `POST /investigations` body:
 
@@ -391,6 +450,7 @@ The report you get back is the verification result:
   "investigation_id": "…",
   "schema_version": "metric-hypothesis-verification.v1",
   "report": {
+    "schema_version": "metric-hypothesis-verification.v1",
     "hypothesis_id": "…",
     "composition": "any",
     "verdict": "supported",
@@ -399,12 +459,15 @@ The report you get back is the verification result:
       {
         "predicate_id": "p1",
         "verdict": "supported",
+        "reason": null,
         "observed_direction": "increase",
+        "minimum_score": "…",
         "supporting_evidence_ids": ["…"],
         "contradicting_evidence_ids": []
       }
     ],
-    "supporting_evidence_ids": ["…"]
+    "supporting_evidence_ids": ["…"],
+    "contradicting_evidence_ids": []
   },
   "baseline_ranking": {
     "schema_version": "baseline-ranking.v1",
@@ -421,6 +484,9 @@ The report you get back is the verification result:
 }
 ```
 
+Each predicate result carries the verifier threshold it was judged against, `minimum_score`, as a
+`float.hex()` string, and a `reason` code whenever its verdict is `unknown`.
+
 `baseline_ranking` (ADR 0019) is the deterministic engine's own answer, carried beside the verified
 hypothesis rather than inside it: candidates sorted by descending suspicion score, the policy that
 produced them, and the lead over the runner-up. `kind` is `"ranking"` or `"abstention"`. It is
@@ -435,7 +501,10 @@ internals cross the boundary.
 
 One command, nothing installed beyond Python and uv. It starts the real entrypoint on a free
 loopback port, drives one investigation through the real API, worker, ledger and verifier, and
-prints what came back. The first line of its output says exactly what is not real.
+prints what came back. The first line of its output says exactly what is not real. It strips any
+ambient `IEC_*` variables and `GEMINI_API_KEY` from the server's environment first, so a
+developer's shell cannot change what it runs, and, like the live driver, it prints telemetry-
+and model-derived names with non-printable characters replaced.
 
 ```console
 $ uv run --locked python scripts/demo_hermetic_investigation.py
@@ -477,11 +546,11 @@ prints it after the predicate lines.
 
 The scenario is a **payment-routing incident** (ADR 0018). Four components, `bank_router`,
 `checkout`, `upi_switch`, `ledger_db`, sit flat until a published instant, when `bank_router`, as
-if a bad deploy just shipped, degrades: its latency and error ratio climb an order of magnitude
-while the rest stay healthy. `ledger_db` is a deliberate decoy, a database-shaped signal a model
-is tempted to blame. This is the shape of a fintech reliability bar (*every money action
-explainable, bounded and gated*) with IEC's twist: the model may propose, but only the verifier
-decides.
+if a bad deploy just shipped, degrades: its latency climbs 9.5x (0.10 s to 0.95 s) and its error
+ratio 90x (0.2% to 18%) while the rest stay healthy. `ledger_db` is a deliberate decoy, a
+database-shaped signal a model is tempted to blame. This is the shape of a fintech reliability
+bar (*every money action explainable, bounded and gated*) with IEC's twist: the model may
+propose, but only the verifier decides.
 
 ```bash
 docker compose --profile demo up -d --build
@@ -525,8 +594,9 @@ Pulled from the same report:
 }
 ```
 
-That hash addresses the exact ledger entry the verdict rests on. Look it up and you get the same
-bytes the verifier read.
+That hash is the ID of the ledger entry the verdict rests on. Its stored row in the `evidence`
+table holds a subset of the fields the ID was hashed over, so it identifies the entry but cannot
+be re-hashed to reproduce the ID, and no HTTP route serves it yet ([Known gaps](#known-gaps)).
 
 **With a real model (2026-08-23).** Run with `IEC_LLM_PROVIDER=vertex` (`gemini-2.5-flash` on a
 dedicated GCP project, ADC only, no credential in any container). This run is the table at the top
@@ -576,9 +646,9 @@ with no retry storm, and nothing about the transport reaches the logs.
 These are excluded from the hermetic gate because they need real infrastructure:
 
 ```bash
-# PostgreSQL:
+# PostgreSQL (every test in the suite skips unless DATABASE_URL is set):
 docker compose up -d
-uv run --locked python -m unittest tests.test_persistence_postgres
+DATABASE_URL=postgresql://iec:iec@localhost:5432/iec uv run --locked python -m unittest tests.test_persistence_postgres
 
 # Live Gemini (Developer API key):
 GEMINI_API_KEY=… uv run --locked python -m unittest tests.test_llm_gemini
@@ -623,7 +693,10 @@ src/incident_evidence_compiler/
   evaluation/
     rcaeval/      # bounded, label-safe RCAEval RE2 adapter + evaluation-only sidecar
     harness/      # baseline-input bridge, scoring, two-arm runner
-scripts/          # validate_project.py (governance gate), run_evaluation.py
+scripts/          # validate_project.py (governance gate), run_evaluation.py, the demo drivers
+                  # (demo_hermetic_investigation.py, demo_live_investigation.py, _demo_common.py)
+                  # and the synthetic exporter (demo_anomaly_exporter.py)
+demo/             # prometheus.yml for the `demo` compose profile
 tests/            # hermetic unit/integration tests (fakes + deterministic LLM)
 docs/             # decisions (ADRs), devlog, datasets, evaluation artifacts, architecture
 ```
@@ -639,7 +712,8 @@ criteria before implementation, model output untrusted everywhere, no unverified
 Enforcement is mechanical, not aspirational.
 [`scripts/validate_project.py`](scripts/validate_project.py) must pass before any phase commit, and
 [`.kiro/hooks/project_hook.py`](.kiro/hooks/project_hook.py) blocks disallowed actions at the tool
-boundary. Both are themselves tested, because a rule nobody checks is only a preference.
+boundary, logs each session (rotating the log at 1 MB), and runs `validate_project.py --quick` when
+a session stops. Both are themselves tested, because a rule nobody checks is only a preference.
 
 The shape is the same one as the product: a capable generator proposes, a deterministic layer
 decides what counts, and nothing is accepted because it merely sounds right.
@@ -651,7 +725,9 @@ decides what counts, and nothing is accepted because it merely sounds right.
 - Treat `UNKNOWN` as a first-class answer, not a rounding error toward "no."
 - PostgreSQL is the source of truth; everything else is a cache or a guess.
 - Model output is untrusted input, always, everywhere.
-- Every external call gets a deadline.
+- Every external call gets a deadline. The model call and each Prometheus request have one; the
+  worker's telemetry load and every PostgreSQL call, connect and statements alike, do not yet
+  ([Known gaps](#known-gaps)).
 - A feature earns its complexity with a test or a measurement, or it doesn't ship.
 - The README never claims more than a committed artifact can back up.
 
@@ -677,8 +753,10 @@ I'd rather list this plainly than let you find it the hard way.
   latency, job outcomes, provider-timeout rate, token counts, verdict distribution, no PII).
   OpenTelemetry spans and cost estimation are deferred.
 - The in-memory store serializes the API behind the worker. With `IEC_PERSISTENCE=memory` one
-  lock is held for a whole job, model call included, so the data routes wait for up to the provider
-  deadline while `/health` and `/metrics` stay responsive. PostgreSQL has no such coupling.
+  lock is held for a whole job, telemetry load and model call included, so the data routes wait as
+  long as the job runs, which the unbounded telemetry load leaves open-ended, while `/health` and
+  `/metrics` stay responsive (`persistence/memory.py:300-316`, `application/worker.py:138-190`).
+  PostgreSQL has no such coupling.
 - The change-event ledger is implemented and tested but not wired. Only metric evidence flows
   today; deployment co-occurrence verification waits for an ingestion source.
 - Evidence is deduplicated per run but listed per investigation. Two investigations over the
@@ -695,6 +773,34 @@ I'd rather list this plainly than let you find it the hard way.
   configuration; the default stays at `1.0` so those transcripts remain reproducible, and the
   policy in force is serialized into every report's `baseline_ranking.policy`.
 - Single-node Postgres queue. Redis admission control is deferred (ADR 0007).
+
+## Known gaps
+
+Code behaviour that falls short of what these docs or an ADR described as intended, or that they
+did not mention, checked against `e02d918` on 2026-11-19. None of these is fixed yet. Paths are
+under `src/incident_evidence_compiler/` unless they start with `scripts/` or `tests/`.
+
+- Retries have no backoff: a retried job goes back to `queued` with `available_at` unchanged, so it is claimable at once (`application/worker.py:295-303`, `persistence/postgres/unit_of_work.py:327-337`, `persistence/memory.py:175-179`).
+- No connect timeout on PostgreSQL: the code passes no `connect_timeout`, so a connect attempt waits up to psycopg's own 130-second default unless the DSN sets one (`persistence/postgres/unit_of_work.py:530`).
+- No timeout on any PostgreSQL statement or commit: no `statement_timeout`, `lock_timeout` or client-side timeout is set, so each `execute` and `commit` waits indefinitely, inside the worker's per-job transaction and in every API data route, and a stalled database stalls the worker loop (`persistence/postgres/unit_of_work.py:288-304, 329-333, 449-453, 523-524`, `application/worker.py:138-180`, `application/use_cases.py:53, 109, 123`, `runtime/server.py:130-138`).
+- No deadline on the worker's telemetry load (`application/worker.py:184-190`).
+- `IEC_PROM_TIMEOUT_SECONDS` is a socket timeout on the connect and each blocking read, so a response that trickles in can run past it (`runtime/prometheus.py:106-111`).
+- The served `RcaevalTelemetrySource` never calls `guard_split`, so `IEC_RE2_SPLIT=TT` opens the sealed split without a `SealedSplitPermit` and `SS` opens the reserved one (`runtime/telemetry.py:54-55`; the guard runs only in `evaluation/rcaeval/adapter.py:101`).
+- The same source keeps each case's `<service>_<fault>` directory locator, which is fault-label metadata, in memory behind an operator-only `locator_for` (`runtime/telemetry.py:60, 71, 80-86`).
+- The service never applies database migrations, so PostgreSQL mode needs the schema step under [Run the service](#run-the-service); `apply_migrations` is called only from a test (`runtime/server.py:47-51`, `tests/test_persistence_postgres.py:119`).
+- Model-authored `hypothesis_id` and `predicate_id` are unrestricted non-blank strings, bounded only by the 65,536-character proposal ceiling, and are copied into reports (`domain/hypotheses.py:50, 88`, `domain/serialization.py:321, 428`).
+- A stored evidence row cannot be re-hashed to its ID: its columns carry the tenant, run and schema version and its payload JSON the entry's own fields, but the row lacks the incident, window, policy and decision the ID also hashes, and no HTTP route serves evidence (`persistence/migrations/0001_initial.sql:58-69`, `domain/serialization.py:246-255`, `domain/evidence/_identity.py:81-89`, `api/app.py:71-134`).
+- On PostgreSQL a second report put inside the worker's transaction aborts that transaction (no savepoint), so the fail-closed path's first `UPDATE` raises a raw `InFailedSqlTransaction`, nothing is recorded, the rollback undoes the claim, and the loop reclaims the same job on every iteration; it keeps the oldest `available_at`, so jobs queued behind it never run (reproduced against `postgres:16`; `persistence/postgres/unit_of_work.py:437-458`, `application/worker.py:168-174, 305-323`, `runtime/server.py:130-138`).
+- `JobStatus.RUNNING` and `AttemptOutcome.TIMEOUT` are never set: a job goes from `claimed` straight to its final status, and a timed-out attempt is recorded as `failed` with `provider_timeout` (`persistence/records.py:94, 103`, `application/worker.py:219-221, 302, 312`).
+- The worker applies its own `max_attempts` (default 3) and ignores the value persisted on the job row (`application/worker.py:97, 298`, `persistence/records.py:161-168`).
+- Only `UniqueViolation` is mapped to a typed persistence error; connection and other driver errors leave the persistence layer as raw psycopg exceptions (`persistence/postgres/unit_of_work.py:216, 275, 365, 455, 530`).
+- `iec_provider_timeouts_total` counts only the worker's own deadline; a Gemini client timeout is recorded as `provider_unavailable` and not counted (`application/worker.py:219-223`, `llm/gemini.py:171-174`).
+- A job whose investigation row is missing is set `failed` with no `iec_worker_jobs_total` increment and no attempt record (`application/worker.py:148-151`).
+- Dropped data is not surfaced: no caller reads `dropped_cell_count`, and the Prometheus mapper drops non-finite samples without counting them (`evaluation/rcaeval/csv_loader.py:226`, `runtime/prometheus.py:200-202`).
+- `ChangeEventKey`, `ChangeEvent` and `ChangeEventLog` keep the default dataclass `repr`, which prints every field (`domain/changes.py:32, 46, 62`).
+- Every evaluation artifact's `notes` string says "development split", the sealed RE2-TT ones included (`scripts/run_evaluation.py:163-167`).
+- No connection pool: every PostgreSQL unit of work opens and closes its own connection, so an idle worker connects once per poll (`persistence/postgres/unit_of_work.py:529-547`, `runtime/server.py:130-138`).
+- One transaction per job holds the job row lock across the telemetry load and the model call (`application/worker.py:138-180`).
 
 ## Roadmap
 

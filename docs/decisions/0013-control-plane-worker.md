@@ -1,6 +1,23 @@
 # ADR 0013: Control plane and worker boundary (Phase 6)
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged
+  history. Paths are under `src/incident_evidence_compiler/`.
+  - `TelemetrySource.load` takes a fourth argument, `window` (`application/telemetry.py:23-28`).
+  - The worker sets the investigation `RUNNING` (`application/worker.py:159-161`), but the job
+    goes from `claimed` straight to its final status (`persistence/postgres/unit_of_work.py:300-303`);
+    `JobStatus.RUNNING` is never set (`persistence/records.py:94`).
+  - A timeout records a `failed` attempt with error code `provider_timeout`, not a `TIMEOUT`
+    attempt (`application/worker.py:219-221, 302, 312`); `AttemptOutcome.TIMEOUT`
+    (`persistence/records.py:103`) is unused.
+  - A retry returns the job to `queued` without touching `available_at`, so there is no backoff
+    (`application/worker.py:295-303`, `persistence/postgres/unit_of_work.py:327-337`).
+  - The worker uses its own `max_attempts` (default 3) and ignores the job row's persisted value
+    (`application/worker.py:97, 298`).
+  - `/metrics` is also unauthenticated, per ADR 0015 (`api/app.py:75-81`).
+  - No durable `TelemetrySource` exists. The sources are the in-memory one for tests, the RCAEval
+    demo bridge and live Prometheus (`application/telemetry.py:31`, `runtime/telemetry.py:43`,
+    `runtime/prometheus.py:219`).
 - Date: 2026-07-18
 - Decision owners: Aswani and the project orchestrator
 

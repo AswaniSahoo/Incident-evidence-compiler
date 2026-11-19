@@ -1,6 +1,10 @@
 # ADR 0004: Phase 1 Domain Baseline
 
 - Status: Accepted
+- Status note, 2026-11-19: what the code at `e02d918` does today; the record below is unchanged history. Paths are under `src/incident_evidence_compiler/`.
+  - The evaluation loader enforces the RE2-TT override and the RE2-SS reservation (`evaluation/rcaeval/adapter.py:100-101`). The served demo source, `RcaevalTelemetrySource`, calls `parse_split` and `validate_root` but never `guard_split`, so it loads TT without a permit and SS at all (`runtime/telemetry.py:54-55`).
+  - That source also keeps each case's `<service>_<fault>` locator in memory for an operator-only `locator_for` lookup (`runtime/telemetry.py:60, 71, 80-86`); the prompt and reports see only an opaque `case-<digest>` id (`runtime/telemetry.py:32-40, 70`).
+  - The project is no longer free of runtime dependencies: `pyproject.toml:11-16` declares four, sanctioned by ADRs 0011 to 0013. The domain package is still standard-library-only.
 - Date: 2026-07-16
 
 ## Context
